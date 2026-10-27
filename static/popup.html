@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TabSage</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="popup">
+    <header>
+      <input id="q" type="search" placeholder="Search open & archived tabs…" autocomplete="off" autofocus />
+    </header>
+
+    <section id="results" hidden>
+      <div id="openList"></div>
+      <h3 id="archHead" hidden>Archived</h3>
+      <div id="archList"></div>
+    </section>
+
+    <section id="home">
+      <div class="toolbar">
+        <button id="organize" class="primary" title="Group & sort now (Alt+Shift+O)">Organize</button>
+        <button id="rediscover" title="Re-read all titles and propose fresh folders">Re-discover</button>
+        <button id="settings" class="ghost" title="Settings">⚙</button>
+      </div>
+      <div id="engine" class="engine"></div>
+      <h3>Groups <span class="muted small">· ★ pins a group to the front and protects it from trimming</span></h3>
+      <div id="groups"></div>
+      <div class="foot muted small" id="foot"></div>
+    </section>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

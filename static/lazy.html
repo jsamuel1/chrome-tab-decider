@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>…</title>
+    <link rel="icon" id="fav" href="icons/icon32.png" />
+    <style>
+      :root { color-scheme: light dark; --bg: #f6f7f9; --fg: #1d2330; --muted: #6b7280; --card: #fff; --line: #e5e7eb; --accent: #2563eb; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #15181e; --fg: #e8eaf0; --muted: #9aa3b2; --card: #1e222a; --line: #2c313b; --accent: #7aa2ff; } }
+      html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+      main { min-height: 100%; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+      .card { max-width: 560px; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; cursor: pointer; }
+      .row { display: flex; gap: 12px; align-items: center; }
+      img { width: 24px; height: 24px; flex: none; }
+      h1 { font-size: 16px; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+      .url { color: var(--muted); font-size: 12px; margin-top: 8px; overflow-wrap: anywhere; }
+      .hint { color: var(--accent); font-size: 12px; margin-top: 14px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="card" id="card" role="button" tabindex="0">
+        <div class="row"><img id="icon" alt="" /><h1 id="title"></h1></div>
+        <div class="url" id="url"></div>
+        <div class="hint">Restored by TabSage without loading — click to open the page</div>
+      </div>
+    </main>
+    <script src="lazy.js"></script>
+  </body>
+</html>

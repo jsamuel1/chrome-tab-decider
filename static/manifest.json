@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "TabSage — AI Tab Groups",
+  "short_name": "TabSage",
+  "version": "0.1.0",
+  "description": "Keeps your tabs in auto-sorted Chrome tab groups, classified on-device with Strands Decider (WebGPU) and Chrome's built-in LLM.",
+  "minimum_chrome_version": "138",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "unlimitedStorage",
+    "offscreen",
+    "alarms",
+    "favicon"
+  ],
+  "host_permissions": [
+    "https://huggingface.co/*",
+    "https://*.huggingface.co/*",
+    "https://*.hf.co/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "TabSage",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "options_page": "options.html",
+  "commands": {
+    "organize-now": {
+      "suggested_key": { "default": "Alt+Shift+O" },
+      "description": "Organize tabs now"
+    },
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+T" },
+      "description": "Open TabSage search"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

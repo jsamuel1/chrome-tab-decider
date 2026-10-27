@@ -1,0 +1,186 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TabSage Settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options">
+    <h1>TabSage</h1>
+    <div class="muted">Auto-groups your tabs by domain and topic, sorted dynamically, persisted across restarts. Everything runs on this device.</div>
+
+    <h2>On-device AI</h2>
+    <div class="card">
+      <div class="field">
+        <label for="model">Classifier model</label>
+        <select id="model" data-key="model"></select>
+        <div class="help" id="modelHelp"></div>
+      </div>
+      <div class="field" id="customRow" hidden>
+        <label>Custom model (same graph contract)</label>
+        <div style="display:grid;gap:6px">
+          <input type="text" id="c_repo" placeholder="owner/repo on Hugging Face" />
+          <input type="text" id="c_modelFile" placeholder="onnx/model_q4f16.onnx" />
+          <input type="text" id="c_dataFile" placeholder="onnx/model_q4f16.onnx_data (optional)" />
+          <input type="text" id="c_configFile" placeholder="config.json" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Model status</label>
+        <div>
+          <div id="modelStatus" class="muted">checking…</div>
+          <progress id="modelProg" max="100" value="0" hidden></progress>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button id="loadModel" class="primary">Download &amp; load</button>
+            <button id="unloadModel">Unload</button>
+            <button id="selfTest" title="Compare against the upstream PyTorch reference">Run self-test</button>
+          </div>
+          <pre id="selfTestOut" class="small" style="white-space:pre-wrap;margin:8px 0 0" hidden></pre>
+        </div>
+      </div>
+      <div class="field">
+        <label for="device">Compute</label>
+        <select id="device" data-key="device">
+          <option value="webgpu">WebGPU (recommended)</option>
+          <option value="wasm">CPU / WebAssembly (slow)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="useLLM">Folder discovery with Chrome's built-in LLM</label>
+        <div>
+          <input type="checkbox" id="useLLM" data-key="useLLM" />
+          <span id="llmStatus" class="muted"></span>
+          <button id="prepareLLM" hidden>Download Gemini Nano</button>
+        </div>
+        <div class="help">One pass over all tab titles proposes folder names; the decider then files each domain into one of them. Falls back to keyword extraction.</div>
+      </div>
+      <div class="field">
+        <label for="seedCategories">Always-offered folders</label>
+        <input type="text" id="seedCategories" data-key="seedCategories" placeholder="e.g. AWS, Robotics, Espresso" />
+      </div>
+      <div class="field">
+        <label for="minConfidence">Min. confidence</label>
+        <input type="number" id="minConfidence" data-key="minConfidence" min="0" max="1" step="0.05" />
+        <div class="help">Below this the domain goes to the Other group.</div>
+      </div>
+      <div class="field">
+        <label for="idleUnloadMin">Unload model after idle (min)</label>
+        <input type="number" id="idleUnloadMin" data-key="idleUnloadMin" min="1" max="240" />
+      </div>
+    </div>
+
+    <h2>Grouping</h2>
+    <div class="card">
+      <div class="field">
+        <label for="domainKey">Same-domain key</label>
+        <select id="domainKey" data-key="domainKey">
+          <option value="hostname">Hostname (mail.google.com ≠ docs.google.com)</option>
+          <option value="registrable">Registrable domain (all *.google.com together)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="maxGroups">Top categories (groups)</label>
+        <input type="number" id="maxGroups" data-key="maxGroups" min="2" max="20" />
+        <div class="help">Smaller categories fold into the Other group. Pinned groups always count.</div>
+      </div>
+      <div class="field">
+        <label for="otherGroupName">Name of the catch-all group</label>
+        <input type="text" id="otherGroupName" data-key="otherGroupName" />
+      </div>
+      <div class="field">
+        <label for="autoDiscover">Discover new folders as "Other" grows</label>
+        <input type="checkbox" id="autoDiscover" data-key="autoDiscover" />
+      </div>
+      <div class="field">
+        <label for="collapseInactiveGroups">Collapse groups not in use</label>
+        <input type="checkbox" id="collapseInactiveGroups" data-key="collapseInactiveGroups" />
+      </div>
+    </div>
+
+    <h2>Sorting</h2>
+    <div class="card">
+      <div class="field">
+        <label for="groupSort">Group order</label>
+        <select id="groupSort" data-key="groupSort">
+          <option value="mru">Most recently used</option>
+          <option value="count">Most tabs</option>
+          <option value="alpha">Alphabetical</option>
+          <option value="manual">Manual (only pinned groups move)</option>
+        </select>
+        <div class="help">Pinned groups always come first; Other always last.</div>
+      </div>
+      <div class="field">
+        <label for="tabSort">Tab order inside groups</label>
+        <select id="tabSort" data-key="tabSort">
+          <option value="domain-mru">MRU, same-domain tabs kept together</option>
+          <option value="mru">Most recently used</option>
+          <option value="title">Title A–Z</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sortDelaySec">Re-sort after (seconds idle)</label>
+        <input type="number" id="sortDelaySec" data-key="sortDelaySec" min="2" max="3600" />
+      </div>
+    </div>
+
+    <h2>Trim ad-hoc tabs</h2>
+    <div class="card">
+      <div class="field">
+        <label for="archiveEnabled">Enabled</label>
+        <input type="checkbox" id="archiveEnabled" data-key="archiveEnabled" />
+      </div>
+      <div class="field">
+        <label for="archiveDays">Close tabs not revisited for (days)</label>
+        <input type="number" id="archiveDays" data-key="archiveDays" min="1" max="365" />
+        <div class="help">Closed tabs stay searchable from the toolbar popup. Pinned tabs, pinned groups, playing audio and the active tab are never trimmed.</div>
+      </div>
+      <div class="field">
+        <label for="archiveScope">Which tabs</label>
+        <select id="archiveScope" data-key="archiveScope">
+          <option value="unpinned">Any tab outside a pinned group</option>
+          <option value="other">Only tabs in the Other group</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Archive</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button id="archivePreview">Preview</button>
+          <button id="archiveNow">Trim now</button>
+          <button id="clearArchive">Clear archive</button>
+          <span id="archiveMsg" class="muted"></span>
+        </div>
+      </div>
+    </div>
+
+    <h2>Startup</h2>
+    <div class="card">
+      <div class="field">
+        <label for="restoreOnStartup">Restore groups on browser start</label>
+        <input type="checkbox" id="restoreOnStartup" data-key="restoreOnStartup" />
+        <div class="help">Tabs Chrome already restored are regrouped in place. Missing ones come back as lightweight placeholders that only load when you open them.</div>
+      </div>
+    </div>
+
+    <h2>Folders &amp; learned domains</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Folder</th><th>Domains (click to forget)</th><th></th></tr></thead>
+        <tbody id="cats"></tbody>
+      </table>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <input type="text" id="newCat" placeholder="Add a folder…" />
+        <button id="addCat">Add</button>
+      </div>
+      <div class="muted small" style="margin-top:8px">Drag a tab into a different group and TabSage remembers that for the whole domain.</div>
+    </div>
+
+    <h2>Data</h2>
+    <div class="card" style="display:flex;gap:6px;flex-wrap:wrap">
+      <button id="export">Export JSON</button>
+      <button id="reset">Reset everything</button>
+    </div>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
