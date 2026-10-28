@@ -40,6 +40,11 @@
         </div>
       </div>
       <div class="field">
+        <label for="autoDownload">Download model on startup</label>
+        <input type="checkbox" id="autoDownload" data-key="autoDownload" />
+        <div class="help">Fetches the classifier from Hugging Face into the browser cache when Chrome starts (once; later starts are instant). The GPU session is created on first use.</div>
+      </div>
+      <div class="field">
         <label for="device">Compute</label>
         <select id="device" data-key="device">
           <option value="webgpu">WebGPU (recommended)</option>
