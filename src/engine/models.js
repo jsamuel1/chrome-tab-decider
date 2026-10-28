@@ -3,8 +3,18 @@
 // Temperatures per question kind are read from the repo's config file.
 
 export const MODELS = {
+  'decider-v1-2610-q4f16': {
+    label: 'Strands Decider 2B qwen3.5 v1-2610 · q4f16 (ONNX) — newest, built by this repo\'s model workflow',
+    repo: 'sauhsoj/strands-decider-2B-qwen3.5-v1-2610-ONNX',
+    modelFile: 'onnx/model_q4f16.onnx',
+    dataFile: 'onnx/model_q4f16.onnx_data',
+    configFile: 'config.json',
+    selftestFile: 'selftest.json',
+    approxBytes: 1_110_000_000,
+    needsF16: true,
+  },
   'decider-v19-q4f16': {
-    label: 'Strands Decider 2B hobson-v19 · q4f16 (ONNX) — newest 4-bit build',
+    label: 'Strands Decider 2B hobson-v19 · q4f16 (ONNX, onnx-community)',
     repo: 'onnx-community/strands-decider-2B-hobson-v19-ONNX',
     modelFile: 'onnx/model_q4f16.onnx',
     dataFile: 'onnx/model_q4f16.onnx_data',
@@ -33,14 +43,16 @@ export const MODELS = {
   },
 };
 
+export const DEFAULT_MODEL = 'decider-v1-2610-q4f16';
+
 export function resolveModel(settings) {
   if (settings.model === 'custom') {
     const c = settings.customModel || {};
     if (!c.repo || !c.modelFile) throw new Error('Custom model needs a repo and model file');
     return { label: `Custom: ${c.repo}`, configFile: 'config.json', ...c, id: 'custom' };
   }
-  const m = MODELS[settings.model] || MODELS['decider-v19-q4f16'];
-  return { ...m, id: settings.model in MODELS ? settings.model : 'decider-v19-q4f16' };
+  const id = settings.model in MODELS ? settings.model : DEFAULT_MODEL;
+  return { ...MODELS[id], id };
 }
 
 export const hfUrl = (repo, file, rev = 'main') =>

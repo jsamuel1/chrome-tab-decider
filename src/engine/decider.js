@@ -4,7 +4,7 @@ import * as ort from 'onnxruntime-web/webgpu';
 import { renderQuestion, renderState, softmax, topOf } from './prompt.js';
 import { DeciderTokenizer, optionTokenIndex, utf8Len } from './tokens.js';
 import { hfUrl, readTemperatures } from './models.js';
-import { fetchBytesCached, fetchJsonCached, isCached } from './cache.js';
+import { fetchBytesCached, fetchCached, fetchJsonCached, isCached } from './cache.js';
 
 let configured = false;
 function configureOrt() {
@@ -37,6 +37,37 @@ export class Decider {
     return true;
   }
 
+  /** Download every file into Cache Storage without creating a GPU session. */
+  async prefetch(onProgress = () => {}) {
+    const m = this.model;
+    const approx = m.approxBytes || 0;
+    let done = 0;
+    for (const { file, url } of this.files()) {
+      let last = 0;
+      await fetchCached(url, (loaded, total) => {
+        last = loaded;
+        onProgress({ file, loaded, total, overall: approx ? Math.min(1, (done + loaded) / approx) : 0 });
+      }).catch((e) => {
+        if (/\((401|404)\)/.test(e.message)) {
+          throw new Error(`${m.repo} has no ${file} yet — run the "Build model" workflow, or pick another model`);
+        }
+        throw e;
+      });
+      done += last;
+    }
+    return true;
+  }
+
+  /** Model-specific self-test reference (published next to the graph), if any. */
+  async selftestReference() {
+    if (!this.model.selftestFile) return null;
+    try {
+      return await fetchJsonCached(hfUrl(this.model.repo, this.model.selftestFile));
+    } catch {
+      return null;
+    }
+  }
+
   /** Download (if needed) and create the session. onProgress({file, loaded, total, overall}) */
   load({ device = 'webgpu', onProgress = () => {} } = {}) {
     if (this.session) return Promise.resolve(this);
@@ -47,24 +78,16 @@ export class Decider {
   async _load(device, onProgress) {
     configureOrt();
     const m = this.model;
-    const approx = m.approxBytes || 0;
-    let done = 0;
-    const prog = (file) => (loaded, total) =>
-      onProgress({ file, loaded, total, overall: approx ? Math.min(1, (done + loaded) / approx) : 0 });
+    await this.prefetch(onProgress);
 
-    const cfg = await fetchJsonCached(hfUrl(m.repo, m.configFile), prog(m.configFile)).catch(() => ({}));
+    const cfg = await fetchJsonCached(hfUrl(m.repo, m.configFile)).catch(() => ({}));
     this.temps = readTemperatures(cfg);
-    const tj = await fetchJsonCached(hfUrl(m.repo, 'tokenizer.json'), prog('tokenizer.json'));
-    const tc = await fetchJsonCached(hfUrl(m.repo, 'tokenizer_config.json'), prog('tokenizer_config.json'));
+    const tj = await fetchJsonCached(hfUrl(m.repo, 'tokenizer.json'));
+    const tc = await fetchJsonCached(hfUrl(m.repo, 'tokenizer_config.json'));
     this.tokenizer = new DeciderTokenizer(tj, tc);
 
-    const graph = await fetchBytesCached(hfUrl(m.repo, m.modelFile), prog(m.modelFile));
-    done += graph.byteLength;
-    let data = null;
-    if (m.dataFile) {
-      data = await fetchBytesCached(hfUrl(m.repo, m.dataFile), prog(m.dataFile));
-      done += data.byteLength;
-    }
+    const graph = await fetchBytesCached(hfUrl(m.repo, m.modelFile));
+    const data = m.dataFile ? await fetchBytesCached(hfUrl(m.repo, m.dataFile)) : null;
     onProgress({ file: 'session', loaded: 1, total: 1, overall: 1, stage: 'compiling' });
 
     let ep = device;
@@ -76,10 +99,7 @@ export class Decider {
         ep = 'wasm';
       }
     }
-    const opts = {
-      executionProviders: [ep],
-      graphOptimizationLevel: 'all',
-    };
+    const opts = { executionProviders: [ep], graphOptimizationLevel: 'all' };
     if (data) opts.externalData = [{ path: m.dataFile.split('/').pop(), data }];
     this.session = await ort.InferenceSession.create(graph, opts);
     this.device = ep;
@@ -95,7 +115,7 @@ export class Decider {
     if (q.totalBytes !== utf8Len(rq.text)) throw new Error('tokenizer offsets do not cover the question text');
 
     let stateIds = s.ids;
-    // Give the question first claim on the window (state is truncated from the end of its body).
+    // Give the question first claim on the window (the state body is truncated to fit).
     const maxLen = this.temps.maxLength;
     if (stateIds.length + q.ids.length > maxLen) {
       const keep = Math.max(16, maxLen - q.ids.length);

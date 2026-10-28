@@ -31,8 +31,11 @@ const CASES = [
 
 export async function selfTest(decider) {
   await decider.load();
+  // Prefer the reference published with the model (model/reference.py: same checkpoint, torch fp32).
+  const published = await decider.selftestReference();
+  const cases = published?.cases?.map((c) => ({ id: c.id, state: c.state, q: c.question, len: c.len, opt: c.opt, probs: c.probs })) || CASES;
   const rows = [];
-  for (const c of CASES) {
+  for (const c of cases) {
     const enc = decider.encode(c.state, c.q);
     const posOk = enc.ids.length === c.len && JSON.stringify(enc.optionPos) === JSON.stringify(c.opt);
     const t0 = performance.now();
@@ -45,10 +48,12 @@ export async function selfTest(decider) {
       probs: r.probs.map((p) => +p.toFixed(4)), expected: c.probs, maxDiff: +maxDiff.toFixed(4), top: argOk ? 'same' : 'DIFFERENT', ms,
     });
   }
-  const sameModel = /hobson-v19/i.test(decider.model.repo);
+  const sameModel = !!published || /hobson-v19/i.test(decider.model.repo);
   return {
     model: decider.model.label, device: decider.device,
-    note: sameModel ? 'Expected values are from the same checkpoint; q4f16 typically differs by < 0.07.' : 'Reference is hobson-v19; other checkpoints will differ in probabilities — only token positions must match.',
+    note: published
+      ? `Reference: ${published.reference} for ${published.model}; 4-bit typically moves probabilities by < 0.1.`
+      : sameModel ? 'Reference: upstream hobson-v19 fixtures; q4f16 typically differs by < 0.07.' : 'No reference published for this model — only token positions are checked (against hobson-v19 fixtures).',
     pass: rows.every((r) => r.positions === 'ok' && (!sameModel || r.top === 'same')),
     rows,
   };
