@@ -22,7 +22,8 @@ export const DEFAULT_SETTINGS = {
   // Persistence
   restoreOnStartup: true,
   // AI
-  model: 'decider-v19-q4f16',
+  model: 'decider-v1-2610-q4f16',
+  autoDownload: true,           // fetch the classifier into the browser cache on startup (loads on first use)
   customModel: { repo: '', modelFile: '', dataFile: '', configFile: 'config.json' },
   device: 'webgpu',             // 'webgpu' | 'wasm'
   useLLM: true,                 // Chrome built-in Prompt API for category discovery
