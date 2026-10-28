@@ -1,0 +1,19 @@
+{
+  "_comment": "Self-test cases. reference.py runs them through the torch engine (fp32, CPU) of the checkpoint being exported; the published selftest.json holds the token positions and probabilities the browser must reproduce.",
+  "cases": [
+    {"id": "payouts/noul", "state": "Help! My payouts have been failing for 3 days! ",
+     "question": {"type": "noul", "instructions": "Does this convey urgency?"}},
+    {"id": "payouts/choice", "state": "Help! My payouts have been failing for 3 days! ",
+     "question": {"type": "choice", "instructions": "Which team should handle this?", "criteria": {"billing": "", "sales": "", "retail": ""}}},
+    {"id": "payouts/score", "state": "Help! My payouts have been failing for 3 days! ",
+     "question": {"type": "score", "instructions": "How frustrated is the writer?", "criteria": ["calm", "frustrated", "depressed"]}},
+    {"id": "strawberry", "state": "strawberry",
+     "question": {"type": "noul", "instructions": "Are there three r's in this word?"}},
+    {"id": "language", "state": "sihamba ngokushesha",
+     "question": {"type": "choice", "instructions": "What language is this phrase in?", "criteria": {"english": "English", "zulu": "isiZulu", "dutch": "Nederlands"}}},
+    {"id": "tabs/dev", "state": "Website: github.com\nOpen tabs on this website:\n- espressif/esp-idf: Espressif IoT Development Framework\n- Pull requests · jsamuel1/chrome-tab-decider",
+     "question": {"type": "choice", "instructions": "Which folder should these browser tabs go in?", "criteria": {"Dev": "code, repositories and developer docs", "Shopping": "online stores and products", "Travel": "flights, hotels and trip planning", "Other": "none of the other folders fit"}}},
+    {"id": "tabs/coffee", "state": "Website: shop.example.com.au\nOpen tabs on this website:\n- Rocket R58 Cinquantotto Dual Boiler Espresso Machine\n- 58mm Calibrated Tamper",
+     "question": {"type": "choice", "instructions": "Which folder should these browser tabs go in?", "criteria": {"Dev": "code, repositories and developer docs", "Espresso": "coffee machines, grinders and accessories", "Travel": "flights, hotels and trip planning", "Other": "none of the other folders fit"}}}
+  ]
+}
