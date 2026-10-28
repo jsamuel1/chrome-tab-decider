@@ -1,0 +1,108 @@
+# Build the newest Strands Decider as a 4-bit WebGPU graph and publish it to Hugging Face.
+# Uses strands-labs/strands-decider PR #77 (torch-free hidden-state engine; prepare_model.py)
+# to fold the LoRA into the torso and export the pointer head, then model/build_onnx.py.
+#
+# Needs a repository secret HF_TOKEN (a Hugging Face token with write access).
+name: Build model (q4f16)
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Strands Decider checkpoint (Qwen3.5 torso, pointer head)
+        default: StrandsAgents/strands-decider-2B-qwen3.5-v1-2610
+      revision:
+        description: Checkpoint revision (branch, tag or commit)
+        default: main
+      strands_ref:
+        description: strands-labs/strands-decider ref that has prepare_model.py
+        default: refs/pull/77/head
+      hf_repo:
+        description: Hugging Face repo to publish to
+        default: sauhsoj/strands-decider-2B-qwen3.5-v1-2610-ONNX
+      publish:
+        description: Upload to Hugging Face after parity passes
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest   # 4 vCPU, 16 GB RAM; the LoRA merge needs ~8 GB
+    timeout-minutes: 180
+    env:
+      HF_HOME: ${{ github.workspace }}/.hf
+      HF_HUB_ENABLE_HF_TRANSFER: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
+      - uses: actions/checkout@v4
+
+      - name: Check out strands-decider (${{ inputs.strands_ref }})
+        uses: actions/checkout@v4
+        with:
+          repository: strands-labs/strands-decider
+          ref: ${{ inputs.strands_ref }}
+          path: strands-decider
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install (versions from PR #77's Lambda Dockerfile)
+        run: |
+          pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+          SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+ci pip install ./strands-decider transformers==5.20.2
+          pip install onnx==1.23.2 onnxruntime==1.31.1 tokenizers hf_transfer
+
+      - name: Fold LoRA into the torso, export the pointer head (PR #77 prepare_model.py)
+        run: python strands-decider/deploy/lambda/scripts/prepare_model.py "${{ inputs.model }}" "${{ inputs.revision }}" work
+
+      - name: Torch reference for the self-test cases
+        run: python model/reference.py "${{ inputs.model }}" "${{ inputs.revision }}" work/assets work/selftest.json
+
+      - name: Fetch onnx-community Qwen3.5 q4f16 graphs and weight mapping
+        run: |
+          rm -rf "$HF_HOME/hub/models--Qwen--Qwen3.5-2B-Base"
+          python - <<'PY'
+          from huggingface_hub import snapshot_download, hf_hub_download
+          snapshot_download("onnx-community/Qwen3.5-2B-ONNX-OPT", local_dir="work/base_onnx",
+              allow_patterns=["*.json", "onnx/decoder_model_merged_q4f16.onnx*", "onnx/embed_tokens_q4f16.onnx*"])
+          hf_hub_download("onnx-community/strands-decider-2B-hobson-v19-ONNX", "conversion/qwen3_5_opt_mapping.json", local_dir="work/map")
+          PY
+          df -h /
+
+      - name: Build fused q4f16 graph
+        run: |
+          python model/build_onnx.py work/torso work/assets work/base_onnx work/map/conversion/qwen3_5_opt_mapping.json work/out
+          rm -rf work/torso work/base_onnx
+          ls -la work/out/onnx
+
+      - name: Parity (ONNX Runtime CPU vs torch fp32)
+        run: python model/parity.py work/out work/selftest.json work/assets/head_config.json
+
+      - name: Assemble repo${{ inputs.publish && ' and publish to Hugging Face' || '' }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ "${{ inputs.publish }}" = "true" ]; then
+            test -n "$HF_TOKEN" || { echo "::error::Add a HF_TOKEN repository secret (write access)"; exit 1; }
+            python model/make_repo.py "${{ inputs.model }}" "${{ inputs.revision }}" work/assets work/out work/selftest.json "${{ inputs.hf_repo }}"
+            echo "Published: https://huggingface.co/${{ inputs.hf_repo }}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            python model/make_repo.py "${{ inputs.model }}" "${{ inputs.revision }}" work/assets work/out work/selftest.json
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-card-and-selftest
+          path: |
+            work/out/repo/README.md
+            work/out/repo/config.json
+            work/out/repo/selftest.json

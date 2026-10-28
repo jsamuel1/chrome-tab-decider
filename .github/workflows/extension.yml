@@ -1,0 +1,76 @@
+# Build, test and package the Chrome extension.
+# Every push/PR: an artifact "tabsage-extension" (download, unzip, chrome://extensions → Load unpacked).
+# main: a rolling "latest" pre-release with the zip.
+# Tags v*: a GitHub Release with tabsage-<version>.zip attached.
+name: Extension
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: npm run build
+
+      - name: E2E (Chromium loads the extension and organizes tabs)
+        run: |
+          npm install --no-save --ignore-scripts playwright@1
+          npx playwright install --with-deps chromium
+          node test/e2e/run.mjs | tee e2e.log
+          grep -q "OK same-domain tabs share a group" e2e.log
+          grep -q "no console errors" e2e.log
+
+      - name: Package
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./dist/manifest.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          (cd dist && zip -qr "../tabsage-$VERSION.zip" . -x '*.map')
+          ls -la tabsage-*.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tabsage-extension-${{ steps.pkg.outputs.version }}
+          path: |
+            dist
+            !dist/**/*.map
+
+      - name: Publish rolling "latest" pre-release (main only)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest "tabsage-${{ steps.pkg.outputs.version }}.zip" --prerelease \
+            --target "$GITHUB_SHA" --title "Latest build (${{ steps.pkg.outputs.version }})" \
+            --notes "Built from ${GITHUB_SHA}. Unzip, then chrome://extensions → Developer mode → Load unpacked."
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tabsage-${{ steps.pkg.outputs.version }}.zip
+          generate_release_notes: true
