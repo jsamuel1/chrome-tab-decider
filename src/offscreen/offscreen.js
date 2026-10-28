@@ -73,6 +73,18 @@ const handlers = {
     return d.ask(state, { type: 'noul', instructions });
   },
 
+  async 'decider.prefetch'({ settings }) {
+    const d = getDecider(settings);
+    if (await d.isDownloaded()) return { downloaded: true, cached: true };
+    await d.prefetch((p) => {
+      lastProgress = p;
+      broadcast({ type: 'model-progress', progress: p });
+    });
+    lastProgress = null;
+    broadcast({ type: 'model-downloaded' });
+    return { downloaded: true };
+  },
+
   async 'decider.selftest'({ settings }) {
     const d = getDecider(settings);
     await handlers['decider.load']({ settings });
