@@ -34,7 +34,23 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   setupAlarms();
   if (reason === 'install') chrome.runtime.openOptionsPage();
   organize({ reason: 'installed' }).then(() => scheduleSnapshot(500));
+  prefetchModel('install');
 });
+
+/** Download the classifier into the browser cache (no GPU session until it is needed). */
+async function prefetchModel(why) {
+  const settings = await getSettings();
+  if (!settings.autoDownload) return;
+  try {
+    const r = await ai('decider.prefetch', { settings }, 2 * 60 * 60 * 1000);
+    if (!r.cached) {
+      console.info(`[TabSage] model downloaded (${why})`);
+      organize({ reason: 'model-downloaded', reassign: 'heuristic' });
+    }
+  } catch (e) {
+    console.warn('[TabSage] model download skipped:', e.message);
+  }
+}
 
 chrome.runtime.onStartup.addListener(async () => {
   startingUp = true;
@@ -48,6 +64,7 @@ chrome.runtime.onStartup.addListener(async () => {
     startingUp = false;
     scheduleSnapshot(500);
   }
+  prefetchModel('startup');
 });
 
 function setupAlarms() {
@@ -198,6 +215,7 @@ const api = {
     const s = await setSettings(patch);
     if ('maxGroups' in patch || 'domainKey' in patch || 'otherGroupName' in patch) organize({ reason: 'settings' });
     if ('groupSort' in patch || 'tabSort' in patch) sortAll();
+    if ('model' in patch || 'customModel' in patch || patch.autoDownload) prefetchModel('settings');
     return s;
   },
   async loadModel() {
