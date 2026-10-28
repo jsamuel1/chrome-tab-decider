@@ -74,3 +74,53 @@ jobs:
         with:
           files: tabsage-${{ steps.pkg.outputs.version }}.zip
           generate_release_notes: true
+
+  # Chrome Web Store: on v* tags, upload the zip and submit it for review (Chrome Web Store API v2).
+  # Skipped unless all five secrets are set. The item must already exist (first upload by hand in the
+  # Developer Dashboard, with the Store listing and Privacy tabs filled in).
+  webstore:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: chrome-web-store
+    env:
+      CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+      REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+      PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+      EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+    steps:
+      - name: Check secrets
+        id: check
+        run: |
+          for v in CLIENT_ID CLIENT_SECRET REFRESH_TOKEN PUBLISHER_ID EXTENSION_ID; do
+            if [ -z "${!v}" ]; then echo "::warning::CWS_$v not set; skipping Chrome Web Store publish"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          done
+
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.skip != '1'
+        with:
+          pattern: tabsage-extension-*
+          path: ext
+          merge-multiple: true
+
+      - name: Upload and submit for review
+        if: steps.check.outputs.skip != '1'
+        run: |
+          (cd ext && zip -qr ../extension.zip .)
+          TOKEN=$(curl -fsS https://oauth2.googleapis.com/token \
+            -d client_id="$CLIENT_ID" -d client_secret="$CLIENT_SECRET" \
+            -d refresh_token="$REFRESH_TOKEN" -d grant_type=refresh_token | jq -r .access_token)
+          API=https://chromewebstore.googleapis.com
+          ITEM="publishers/$PUBLISHER_ID/items/$EXTENSION_ID"
+          echo "Uploading…"
+          curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/zip" \
+            --data-binary @extension.zip "$API/upload/v2/$ITEM:upload" | tee upload.json
+          echo "Submitting for review…"   # retried: the uploaded package may still be processing
+          for i in 1 2 3 4 5; do
+            if curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+                 -d '{}' "$API/v2/$ITEM:publish" | tee publish.json; then break; fi
+            [ "$i" = 5 ] && exit 1
+            sleep 30
+          done
+          echo "Submitted to the Chrome Web Store for review." >> "$GITHUB_STEP_SUMMARY"
