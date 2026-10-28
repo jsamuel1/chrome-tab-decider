@@ -12,32 +12,43 @@ A Chrome extension (Manifest V3) that keeps your tabs organized in **native Chro
 
 Everything runs on-device — no tab data leaves the browser. The only network traffic is the one-time model download from Hugging Face.
 
-## Install (developer mode)
+## Install
+
+**From CI (no build needed):** open the [`latest` pre-release](../../releases/tag/latest) (rebuilt on every push to `main`) or any tagged release, download `tabsage-<version>.zip`, unzip it, then `chrome://extensions` → **Developer mode** → **Load unpacked** → pick the unzipped folder. Every workflow run also has a `tabsage-extension-<version>` artifact with the same contents.
+
+**From source:**
 
 ```bash
-npm install --ignore-scripts
-npm run build
+npm ci --ignore-scripts
+npm run build        # → dist/
 ```
 
-Then open `chrome://extensions`, enable **Developer mode**, **Load unpacked** → select `dist/`.
-
-On first install the settings page opens. Click **Download & load** to fetch the classifier (≈1.1 GB, cached), then **Run self-test** to check tokenization and probabilities against the upstream PyTorch reference on your GPU. Until the model is downloaded, the built-in LLM or keyword matching is used.
+On first install the settings page opens and the classifier (≈1.1 GB) downloads from Hugging Face into the browser cache in the background; it is re-used on every later start. Click **Run self-test** to check tokenization and probabilities against the torch reference published with the model. Until the model is there, the built-in LLM or keyword matching is used.
 
 Shortcuts: `Alt+Shift+T` opens search, `Alt+Shift+O` organizes now.
 
 ## Models
 
-Configurable in Settings. All entries share the fused-graph contract
+The default is **Strands Decider 2B qwen3.5 v1-2610, 4-bit (q4f16)**, built by this repo's **Build model (q4f16)** workflow and published to [`sauhsoj/strands-decider-2B-qwen3.5-v1-2610-ONNX`](https://huggingface.co/sauhsoj/strands-decider-2B-qwen3.5-v1-2610-ONNX):
+
+1. [strands-labs/strands-decider PR #77](https://github.com/strands-labs/strands-decider/pull/77)'s `prepare_model.py` folds the LoRA into the Qwen3.5 torso and exports the pointer head (`head.safetensors`, `head_config.json`) — the same split its torch-free `HiddenStateEngine` uses.
+2. `model/reference.py` runs the self-test cases through the upstream torch engine (fp32) for exact token positions and reference probabilities.
+3. `model/build_onnx.py` puts the torso into onnx-community's Qwen3.5-2B q4f16 graphs (4-bit, block 32), drops the LM head and appends the pointer head — one fused graph with the same inputs as the v19 build.
+4. `model/parity.py` runs the graph in ONNX Runtime and fails the workflow if token positions differ or a clear answer flips.
+5. `model/make_repo.py` publishes the graph, tokenizer, config and `selftest.json` to Hugging Face.
+
+Run it from **Actions → Build model (q4f16) → Run workflow** after adding a `HF_TOKEN` repository secret (Hugging Face token with write access). Inputs let you pick another checkpoint, revision, strands-decider ref or target repo.
+
+Other choices in Settings: All entries share the fused-graph contract
 `input_ids, attention_mask, answer_pos, option_pos → logits [B, K]`.
 
 | Setting | Repo | Size | Notes |
 |---|---|---|---|
-| **v19 q4f16 (default)** | [`onnx-community/strands-decider-2B-hobson-v19-ONNX`](https://huggingface.co/onnx-community/strands-decider-2B-hobson-v19-ONNX) | 1.09 GB | Newest 4-bit ONNX build; needs WebGPU `shader-f16` |
+| **v1-2610 q4f16 (default)** | [`sauhsoj/strands-decider-2B-qwen3.5-v1-2610-ONNX`](https://huggingface.co/sauhsoj/strands-decider-2B-qwen3.5-v1-2610-ONNX) | ≈1.1 GB | Built by `.github/workflows/model.yml` |
+| v19 q4f16 | [`onnx-community/strands-decider-2B-hobson-v19-ONNX`](https://huggingface.co/onnx-community/strands-decider-2B-hobson-v19-ONNX) | 1.09 GB | Newest 4-bit ONNX build; needs WebGPU `shader-f16` |
 | v19 q8 | same repo | 1.80 GB | More stable on near-ties |
 | v1-2610 fp16 (experimental) | [`warsang/strands-decider-2b-qwen3v1-web`](https://huggingface.co/warsang/strands-decider-2b-qwen3v1-web) | 3.9 GB | Newest checkpoint (`strands-decider-2B-qwen3.5-v1-2610`), community fp16 export; needs a lot of GPU memory |
 | Custom | any HF repo | — | Same graph contract; temperatures read from `config.json` (`decider.temperature_by_kind`) or `strands_decider_config.json` |
-
-The newer official `v1-2610` checkpoint has no 4-bit ONNX export yet; when one appears, add it as a Custom model (or to `src/engine/models.js`).
 
 ## How classification works
 
@@ -61,6 +72,11 @@ src/engine/llm.js          Chrome Prompt API category discovery
 src/offscreen/offscreen.js offscreen document hosting the GPU + LLM sessions
 static/                    manifest, popup, options, lazy placeholder
 ```
+
+## CI
+
+- `.github/workflows/extension.yml` — every push/PR: unit tests, build, Chromium E2E, packaged zip as an artifact; `main` updates the `latest` pre-release; `v*` tags publish a release.
+- `.github/workflows/model.yml` — manual: builds and publishes the q4f16 model (above).
 
 ## Tests
 

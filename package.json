@@ -1,6 +1,6 @@
 {
   "name": "chrome-tab-decider",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Chrome extension: auto-sorted tab groups classified on-device with Strands Decider (WebGPU) and Chrome built-in AI",
   "scripts": {
     "build": "node scripts/build.mjs",
