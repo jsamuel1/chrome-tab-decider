@@ -14,7 +14,7 @@
 // CWS_CLIENT_ID and CWS_CLIENT_SECRET. With --from-github they never leave GitHub: the
 // .github/workflows/cws-token.yml helper uses the environment secrets of the same names and
 // returns its results encrypted to a key pair made for this run, held only in memory here.
-// Each helper run waits for you to approve it on GitHub; the script prints where.
+// If the environment requires approval, the script prints the run to approve.
 import http from 'node:http';
 import { execFile, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';

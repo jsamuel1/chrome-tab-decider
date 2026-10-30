@@ -29,8 +29,8 @@ permissions:
 
 jobs:
   token:
-    runs-on: ubuntu-latest
-    environment: chrome-web-store # the OAuth secrets live here; each run waits for approval
+    runs-on: ubuntu-26.04
+    environment: chrome-web-store # the OAuth secrets live here; only main and v* tags can use it
     env:
       CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
       CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
