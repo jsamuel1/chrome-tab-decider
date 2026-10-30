@@ -1,0 +1,67 @@
+# Helper for `node scripts/cws-refresh-token.mjs --from-github`: lets that script mint a Chrome Web
+# Store refresh token using the CWS_CLIENT_ID and CWS_CLIENT_SECRET repository secrets, which
+# GitHub never hands back out. Whatever this prints is encrypted to a one-off public key whose
+# private half only ever exists in the local script's memory, so the public log is safe.
+name: CWS token helper
+run-name: CWS token helper ${{ inputs.nonce }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: "client-id: return the OAuth client ID. exchange: trade an authorization code for a refresh token."
+        required: true
+      public_key:
+        description: Base64 of the PEM RSA public key to encrypt the result to
+        required: true
+      nonce:
+        description: Lets the script find its own run
+        required: true
+      code:
+        description: Authorization code (exchange only; single-use and useless without the client secret)
+        default: ""
+      redirect_uri:
+        description: Redirect URI the code was issued for (exchange only)
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  token:
+    runs-on: ubuntu-latest
+    env:
+      CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+      STEP: ${{ inputs.step }}
+      PUBLIC_KEY: ${{ inputs.public_key }}
+      CODE: ${{ inputs.code }}
+      REDIRECT_URI: ${{ inputs.redirect_uri }}
+    steps:
+      - name: Seal the result
+        run: |
+          set -euo pipefail
+          test -n "$CLIENT_ID" && test -n "$CLIENT_SECRET" || { echo "::error::CWS_CLIENT_ID and CWS_CLIENT_SECRET must be set"; exit 1; }
+          printf %s "$PUBLIC_KEY" | base64 -d > pub.pem
+          case "$STEP" in
+            client-id)
+              value="$CLIENT_ID" ;;
+            exchange)
+              resp=$(curl -sS https://oauth2.googleapis.com/token \
+                --data-urlencode client_id="$CLIENT_ID" --data-urlencode client_secret="$CLIENT_SECRET" \
+                --data-urlencode code="$CODE" --data-urlencode redirect_uri="$REDIRECT_URI" \
+                -d grant_type=authorization_code)
+              value=$(jq -r '.refresh_token // empty' <<<"$resp")
+              if [ -z "$value" ]; then
+                echo "::error::token exchange failed: $(jq -r '[.error, .error_description] | map(select(.)) | join(" ")' <<<"$resp")"
+                exit 1
+              fi
+              echo "::add-mask::$value"
+              jq -e '.scope | split(" ") | index("https://www.googleapis.com/auth/chromewebstore")' <<<"$resp" >/dev/null \
+                || { echo "::error::the token was granted without the Chrome Web Store scope"; exit 1; } ;;
+            *)
+              echo "::error::unknown step: $STEP"; exit 1 ;;
+          esac
+          sealed=$(printf %s "$value" | openssl pkeyutl -encrypt -pubin -inkey pub.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0)
+          echo "SEALED:$sealed"
