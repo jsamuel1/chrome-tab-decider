@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Set up a Google Cloud project, branded for sauhsoj.dev, whose OAuth client publishes this
+# Set up a Google Cloud project, branded for sauhsoj.wtf, whose OAuth client publishes this
 # publisher's Chrome extensions, then point every repo's Chrome Web Store secrets at it.
 #
 #   scripts/gcloud-oauth-setup.sh [project-id]
@@ -13,11 +13,11 @@
 # Safe to re-run: an existing project and an enabled API are left as they are.
 set -euo pipefail
 
-PROJECT_ID=${1:-sauhsoj-dev}
-PROJECT_NAME="sauhsoj-dev" # project display names may not contain "."
-APP_NAME="sauhsoj.dev"     # what the consent screen shows
-DOMAIN="sauhsoj.dev"
-SITE="https://www.sauhsoj.dev"
+PROJECT_ID=${1:-sauhsoj-dev} # IDs are permanent; this one predates the move to sauhsoj.wtf
+PROJECT_NAME="sauhsoj-wtf"   # project display names may not contain "."
+APP_NAME="sauhsoj.wtf"       # what the consent screen shows
+DOMAIN="sauhsoj.wtf"
+SITE="https://me.sauhsoj.wtf"
 CLIENT_NAME="Chrome Web Store publishing"
 REPOS=(jsamuel1/chrome-tab-decider jsamuel1/chrome-copy-url)
 CONSOLE="https://console.cloud.google.com/auth"
