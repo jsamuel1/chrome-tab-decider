@@ -1,7 +1,9 @@
 # Build, test and package the Chrome extension.
 # Every push/PR: an artifact "tabsage-extension" (download, unzip, chrome://extensions → Load unpacked).
 # main: a rolling "latest" pre-release with the zip.
-# Tags v*: a GitHub Release with tabsage-<version>.zip attached.
+# Tags v*: a GitHub Release with tabsage-<version>.zip attached; the tag sets the version.
+#   v0.2.4       → version 0.2.4, uploaded to the Chrome Web Store and submitted for review.
+#   v0.2.4-test  → version 0.2.4, a GitHub pre-release, uploaded to the Store as a draft only.
 name: Extension
 
 on:
@@ -33,7 +35,12 @@ jobs:
       - name: Build
         env:
           BUILD_NUMBER: ${{ github.run_number }}
-        run: npm run build
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            v=${GITHUB_REF_NAME#v}
+            export RELEASE_VERSION=${v%%-*}   # v0.2.4-test → 0.2.4
+          fi
+          npm run build
 
       - name: E2E (Chromium loads the extension and organizes tabs)
         run: |
@@ -74,10 +81,12 @@ jobs:
         with:
           files: tabsage-${{ steps.pkg.outputs.version }}.zip
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
-  # Chrome Web Store: on v* tags, upload the zip and submit it for review (Chrome Web Store API v2).
-  # Skipped unless all five secrets are set. The item must already exist (first upload by hand in the
-  # Developer Dashboard, with the Store listing and Privacy tabs filled in).
+  # Chrome Web Store: on v* tags, upload the zip (Chrome Web Store API v2); plain tags also submit it
+  # for review, tags with a suffix (v0.2.4-test) leave it as a draft. Skipped unless all five secrets
+  # are set. The item must already exist (first upload by hand in the Developer Dashboard), and
+  # submitting needs its Store listing and Privacy tabs filled in.
   webstore:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
@@ -104,18 +113,29 @@ jobs:
           path: ext
           merge-multiple: true
 
-      - name: Upload and submit for review
+      - name: Upload${{ !contains(github.ref_name, '-') && ' and submit for review' || ' as a draft' }}
         if: steps.check.outputs.skip != '1'
+        env:
+          SUBMIT: ${{ !contains(github.ref_name, '-') }}
         run: |
           (cd ext && zip -qr ../extension.zip .)
           TOKEN=$(curl -fsS https://oauth2.googleapis.com/token \
-            -d client_id="$CLIENT_ID" -d client_secret="$CLIENT_SECRET" \
-            -d refresh_token="$REFRESH_TOKEN" -d grant_type=refresh_token | jq -r .access_token)
+            --data-urlencode client_id="$CLIENT_ID" --data-urlencode client_secret="$CLIENT_SECRET" \
+            --data-urlencode refresh_token="$REFRESH_TOKEN" -d grant_type=refresh_token | jq -r .access_token)
+          echo "::add-mask::$TOKEN"
           API=https://chromewebstore.googleapis.com
           ITEM="publishers/$PUBLISHER_ID/items/$EXTENSION_ID"
           echo "Uploading…"
           curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/zip" \
             --data-binary @extension.zip "$API/upload/v2/$ITEM:upload" | tee upload.json
+          echo
+          if jq -e '(.uploadState // "") | test("FAIL")' upload.json >/dev/null; then
+            echo "::error::The Chrome Web Store rejected the package (see the response above)"; exit 1
+          fi
+          if [ "$SUBMIT" != "true" ]; then
+            echo "Uploaded to the Chrome Web Store as a draft (not submitted: tag has a suffix)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           echo "Submitting for review…"   # retried: the uploaded package may still be processing
           for i in 1 2 3 4 5; do
             if curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
