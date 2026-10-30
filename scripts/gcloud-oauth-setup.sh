@@ -7,8 +7,9 @@
 # gcloud does the parts Google has an API for: the project and the Chrome Web Store API. The
 # consent screen and a "Desktop app" OAuth client have no public API, so for those the script
 # opens the Console page with what to enter, then waits for the client's JSON download. It
-# stores the client ID and secret as GitHub secrets without printing them, deletes the
-# download, and mints a refresh token with cws-refresh-token.mjs --from-github.
+# stores the client ID and secret as secrets of each repo's chrome-web-store environment without
+# printing them, deletes the download, and mints a refresh token with
+# cws-refresh-token.mjs --from-github.
 #
 # Safe to re-run: an existing project and an enabled API are left as they are.
 set -euo pipefail
@@ -20,6 +21,7 @@ DOMAIN="sauhsoj.wtf"
 SITE="https://me.sauhsoj.wtf"
 CLIENT_NAME="Chrome Web Store publishing"
 REPOS=(jsamuel1/chrome-tab-decider jsamuel1/chrome-copy-url)
+ENVIRONMENT="chrome-web-store" # protected: only approved runs can read its secrets
 CONSOLE="https://console.cloud.google.com/auth"
 here=$(cd "$(dirname "$0")" && pwd)
 account=$(gcloud config get-value account 2>/dev/null)
@@ -72,10 +74,10 @@ field() {
 }
 field client_id >/dev/null # fail before touching any secret
 
-step "5. GitHub secrets"
+step "5. GitHub secrets ($ENVIRONMENT environment)"
 for repo in "${REPOS[@]}"; do
-  field client_id | gh secret set CWS_CLIENT_ID --repo "$repo"
-  field client_secret | gh secret set CWS_CLIENT_SECRET --repo "$repo"
+  field client_id | gh secret set CWS_CLIENT_ID --repo "$repo" --env "$ENVIRONMENT"
+  field client_secret | gh secret set CWS_CLIENT_SECRET --repo "$repo" --env "$ENVIRONMENT"
 done
 rm -f "$json"
 echo "  Deleted $(basename "$json") from Downloads."

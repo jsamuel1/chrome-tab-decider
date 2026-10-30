@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Get a Chrome Web Store API refresh token and store it as the CWS_REFRESH_TOKEN repository
-// secret, without the token ever being printed. One token covers every item of the publisher.
+// Get a Chrome Web Store API refresh token and store it as the CWS_REFRESH_TOKEN secret of each
+// repo's chrome-web-store environment, without the token ever being printed. One token covers
+// every item of the publisher.
 //
 //   node scripts/cws-refresh-token.mjs [--from-github] [owner/repo ...]
 //
@@ -11,8 +12,9 @@
 //
 // Client ID and secret: by default they are prompted for (secret hidden), or read from
 // CWS_CLIENT_ID and CWS_CLIENT_SECRET. With --from-github they never leave GitHub: the
-// .github/workflows/cws-token.yml helper uses the repository secrets of the same names and
+// .github/workflows/cws-token.yml helper uses the environment secrets of the same names and
 // returns its results encrypted to a key pair made for this run, held only in memory here.
+// Each helper run waits for you to approve it on GitHub; the script prints where.
 import http from 'node:http';
 import { execFile, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -22,6 +24,7 @@ import { promisify } from 'node:util';
 const SCOPE = 'https://www.googleapis.com/auth/chromewebstore';
 const HELPER_REPO = 'jsamuel1/chrome-tab-decider';
 const HELPER_WORKFLOW = 'cws-token.yml';
+const ENVIRONMENT = 'chrome-web-store';
 
 const args = process.argv.slice(2);
 const fromGithub = args.includes('--from-github');
@@ -63,9 +66,14 @@ async function viaGithub(step, fields = {}) {
   if (!id) throw new Error(`could not find the ${step} run of ${HELPER_WORKFLOW}`);
   const where = `gh run view ${id} --repo ${HELPER_REPO}`;
 
+  let asked = false;
   for (;;) {
-    const { status, conclusion } = JSON.parse(await gh(['run', 'view', String(id), '--repo', HELPER_REPO,
-      '--json', 'status,conclusion']));
+    const { status, conclusion, url } = JSON.parse(await gh(['run', 'view', String(id), '--repo', HELPER_REPO,
+      '--json', 'status,conclusion,url']));
+    if (status === 'waiting' && !asked) {
+      console.log(`  Waiting for you to approve the ${step} run (Review deployments): ${url}`);
+      asked = true;
+    }
     if (status === 'completed') {
       if (conclusion === 'success') break;
       const failed = await gh(['run', 'view', String(id), '--repo', HELPER_REPO, '--log-failed']).catch(() => '');
@@ -157,7 +165,7 @@ if (fromGithub) {
 
 for (const repo of repos) {
   await new Promise((resolve, reject) => {
-    const proc = spawn('gh', ['secret', 'set', 'CWS_REFRESH_TOKEN', '--repo', repo], {
+    const proc = spawn('gh', ['secret', 'set', 'CWS_REFRESH_TOKEN', '--repo', repo, '--env', ENVIRONMENT], {
       stdio: ['pipe', 'inherit', 'inherit'],
     });
     proc.on('error', reject);
@@ -165,4 +173,4 @@ for (const repo of repos) {
     proc.stdin.end(refreshToken);
   });
 }
-console.log(`CWS_REFRESH_TOKEN set on ${repos.join(', ')}.`);
+console.log(`CWS_REFRESH_TOKEN set in the ${ENVIRONMENT} environment of ${repos.join(', ')}.`);

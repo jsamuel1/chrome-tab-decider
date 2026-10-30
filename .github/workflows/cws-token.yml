@@ -1,5 +1,5 @@
 # Helper for `node scripts/cws-refresh-token.mjs --from-github`: lets that script mint a Chrome Web
-# Store refresh token using the CWS_CLIENT_ID and CWS_CLIENT_SECRET repository secrets, which
+# Store refresh token using the CWS_CLIENT_ID and CWS_CLIENT_SECRET chrome-web-store environment secrets, which
 # GitHub never hands back out. Whatever this prints is encrypted to a one-off public key whose
 # private half only ever exists in the local script's memory, so the public log is safe.
 name: CWS token helper
@@ -30,6 +30,7 @@ permissions:
 jobs:
   token:
     runs-on: ubuntu-latest
+    environment: chrome-web-store # the OAuth secrets live here; each run waits for approval
     env:
       CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
       CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
