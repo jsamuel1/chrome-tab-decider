@@ -55,6 +55,16 @@ export function resolveModel(settings) {
   return { ...MODELS[id], id };
 }
 
+/** Why the configured model can't be used yet (an unfinished custom repo), or null. */
+export function modelError(settings) {
+  try {
+    resolveModel(settings);
+    return null;
+  } catch (e) {
+    return e.message;
+  }
+}
+
 export const hfUrl = (repo, file, rev = 'main') =>
   `https://huggingface.co/${repo}/resolve/${rev}/${file.split('/').map(encodeURIComponent).join('/')}`;
 

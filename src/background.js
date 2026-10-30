@@ -5,7 +5,8 @@ import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, 
 import { sortAll } from './lib/sorter.js';
 import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
 import { runArchive, search, reopenArchived, deleteArchived } from './lib/archive.js';
-import { ai, closeOffscreen, lastAiUse } from './lib/ai.js';
+import { ai, closeOffscreen, ensureOffscreen, unloadIfIdle } from './lib/ai.js';
+import { modelError } from './engine/models.js';
 import { realUrl, domainKey } from './lib/urls.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
 
@@ -40,7 +41,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
 /** Download the classifier into the browser cache (no GPU session until it is needed). */
 async function prefetchModel(why) {
   const settings = await getSettings();
-  if (!settings.autoDownload) return;
+  if (!settings.autoDownload || modelError(settings)) return;
   try {
     const r = await ai('decider.prefetch', { settings }, 2 * 60 * 60 * 1000);
     if (!r.cached) {
@@ -81,7 +82,7 @@ chrome.alarms.onAlarm.addListener(async (a) => {
     if (!startingUp) snapshot();
   } else if (a.name === 'idle') {
     const s = await getSettings();
-    if (lastAiUse && Date.now() - lastAiUse > s.idleUnloadMin * 60000) closeOffscreen().catch(() => {});
+    unloadIfIdle(s.idleUnloadMin).catch(() => {});
   }
 });
 
@@ -159,7 +160,9 @@ const api = {
     const settings = await getSettings();
     const st = await getState();
     let engine = null;
-    try { engine = await ai('decider.status', { settings }, 15000); } catch (e) { engine = { error: e.message }; }
+    const problem = modelError(settings);
+    if (problem) engine = { error: problem };
+    else try { engine = await ai('decider.status', { settings }, 15000); } catch (e) { engine = { error: e.message }; }
     let llm = 'unknown';
     try { llm = (await ai('llm.availability', {}, 15000)).availability; } catch {}
     const groups = await chrome.tabGroups.query({});
@@ -218,17 +221,11 @@ const api = {
     if ('model' in patch || 'customModel' in patch || patch.autoDownload) prefetchModel('settings');
     return s;
   },
-  async loadModel() {
-    const settings = await getSettings();
-    const r = await ai('decider.load', { settings }, 60 * 60 * 1000);
-    // re-check domains that were placed by fallbacks now that the decider is ready
-    organize({ reason: 'model-ready', reassign: 'heuristic' });
-    return r;
-  },
-  async selfTest() {
-    const settings = await getSettings();
-    return ai('decider.selftest', { settings }, 60 * 60 * 1000);
-  },
+  // Long engine calls (load, self-test) go from the page straight to the offscreen document,
+  // so they don't depend on this worker outliving them.
+  ensureEngine: () => ensureOffscreen(),
+  // re-check domains that were placed by fallbacks now that the decider is ready
+  modelReady: () => organize({ reason: 'model-ready', reassign: 'heuristic' }),
   async unloadModel() { await closeOffscreen(); },
   async exportData() {
     const { settings, state } = await chrome.storage.local.get(['settings', 'state']);

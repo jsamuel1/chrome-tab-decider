@@ -16,14 +16,37 @@ export async function clearModelCache() {
   await caches.delete(CACHE);
 }
 
+// One download per URL: a file is only in the cache once cache.put has consumed the whole stream,
+// so later callers join the download in flight (and get its progress) instead of starting over.
+const inflight = new Map();
+
 /**
  * Ensure `url` is cached; returns a Response from the cache.
  * onProgress(loadedBytes, totalBytes) is called while downloading.
  */
 export async function fetchCached(url, onProgress = () => {}) {
+  let job = inflight.get(url);
+  if (!job) {
+    job = { listeners: new Set() };
+    job.done = ensureCached(url, (loaded, total) => {
+      for (const fn of job.listeners) fn(loaded, total);
+    }).finally(() => inflight.delete(url));
+    inflight.set(url, job);
+  }
+  job.listeners.add(onProgress);
+  try {
+    await job.done;
+  } finally {
+    job.listeners.delete(onProgress);
+  }
+  const res = await (await caches.open(CACHE)).match(url);
+  if (!res) throw new Error(`${url} is missing from the model cache`);
+  return res;
+}
+
+async function ensureCached(url, onProgress) {
   const c = await caches.open(CACHE);
-  const hit = await c.match(url);
-  if (hit) return hit;
+  if (await c.match(url)) return;
 
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`Download failed (${res.status}) for ${url}`);
@@ -51,7 +74,6 @@ export async function fetchCached(url, onProgress = () => {}) {
     await c.delete(url);
     throw new Error(`Incomplete download for ${url} (${loaded}/${total})`);
   }
-  return c.match(url);
 }
 
 export async function fetchJsonCached(url, onProgress) {

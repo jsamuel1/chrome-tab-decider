@@ -1,9 +1,10 @@
-import { bg, esc, fmtBytes } from '../lib/ui-common.js';
+import { bg, engine, esc, fmtBytes, progressText } from '../lib/ui-common.js';
 import { MODELS } from '../engine/models.js';
 import { llmAvailability, prepareLLM } from '../engine/llm.js';
 
 const $ = (id) => document.getElementById(id);
 let settings;
+let selfTesting = false;
 
 function fillModels() {
   const sel = $('model');
@@ -67,7 +68,8 @@ async function llmStatus() {
     available: 'Gemini Nano ready',
     downloadable: 'Gemini Nano can be downloaded',
     downloading: 'Gemini Nano downloading…',
-    unavailable: 'Not available on this device (needs 22 GB free disk, >4 GB VRAM or 16 GB RAM)',
+    // availability() gives no reason: a managed Chrome can block it by policy, or the device can fall short
+    unavailable: 'Not available in this Chrome. Either an administrator policy blocks it (managed browsers), or the device falls short (22 GB free disk, and more than 4 GB VRAM or 16 GB RAM).',
     unsupported: 'Prompt API not present in this Chrome (138+ required)',
   }[a] || a;
   $('llmStatus').textContent = text;
@@ -90,7 +92,8 @@ $('loadModel').onclick = async () => {
   $('modelProg').hidden = false;
   $('modelStatus').textContent = 'Starting download… (one-time; cached afterwards)';
   try {
-    await bg('loadModel');
+    await engine('decider.load', { settings: await bg('getSettings') });
+    bg('modelReady').catch(() => {});
   } catch (e) {
     $('modelStatus').textContent = `Failed: ${e.message}`;
   }
@@ -100,15 +103,20 @@ $('loadModel').onclick = async () => {
 };
 $('selfTest').onclick = async () => {
   const out = $('selfTestOut');
+  $('selfTest').disabled = true;
+  selfTesting = true;
   out.hidden = false;
-  out.textContent = 'Running (downloads the model first if needed)…';
+  out.textContent = 'Self-test: checking the model (downloads it first if needed)…';
   try {
-    const r = await bg('selfTest');
+    const r = await engine('decider.selftest', { settings: await bg('getSettings') });
     out.textContent = `${r.pass ? 'PASS' : 'CHECK'} · ${r.model} on ${r.device}\n${r.note}\n\n` +
       r.rows.map((x) => `${x.id.padEnd(15)} tokens=${x.tokens} positions=${x.positions} top=${x.top} maxΔ=${x.maxDiff} ${x.ms}ms\n   got ${JSON.stringify(x.probs)} want ${JSON.stringify(x.expected)}`).join('\n');
   } catch (e) {
     out.textContent = 'Failed: ' + e.message;
   }
+  selfTesting = false;
+  $('selfTest').disabled = false;
+  modelStatus();
 };
 $('unloadModel').onclick = async () => { await bg('unloadModel'); modelStatus(); };
 
@@ -118,11 +126,14 @@ chrome.runtime.onMessage.addListener((m) => {
     const p = m.progress;
     $('modelProg').hidden = false;
     $('modelProg').value = Math.round((p.overall || 0) * 100);
-    $('modelStatus').textContent = p.stage === 'compiling'
-      ? 'Creating WebGPU session…'
-      : `Downloading ${p.file} — ${fmtBytes(p.loaded)}${p.total ? ' / ' + fmtBytes(p.total) : ''}`;
+    $('modelStatus').textContent = progressText(p);
+    if (selfTesting) $('selfTestOut').textContent = `Self-test: ${progressText(p)}`;
   }
-  if (m.type === 'model-ready') modelStatus();
+  if (m.type === 'model-ready') {
+    $('modelProg').hidden = true;
+    modelStatus();
+    if (selfTesting) $('selfTestOut').textContent = `Self-test: model loaded on ${m.device}, running the test cases…`;
+  }
 });
 
 async function cats() {

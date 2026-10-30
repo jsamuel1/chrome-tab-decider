@@ -7,6 +7,15 @@ export async function bg(type, payload = {}) {
   return r.result;
 }
 
+/** Ask the offscreen engine directly (for calls that can outlast the service worker). */
+export async function engine(type, payload = {}) {
+  await bg('ensureEngine');
+  const r = await chrome.runtime.sendMessage({ target: 'offscreen', type, ...payload });
+  if (!r) throw new Error('No response from the TabSage engine');
+  if (!r.ok) throw new Error(r.error);
+  return r.result;
+}
+
 export const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -28,6 +37,13 @@ export function ago(ts) {
 
 export const fmtBytes = (n) => (n > 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${Math.round(n / 1e6)} MB`);
 
+/** One line for a model-progress broadcast: {file, loaded, total, overall, stage}. */
+export function progressText(p) {
+  if (p.stage === 'compiling') return 'Creating WebGPU session…';
+  const pct = p.overall ? ` (${Math.round(p.overall * 100)}% overall)` : '';
+  return `Downloading ${p.file} — ${fmtBytes(p.loaded)}${p.total ? ' / ' + fmtBytes(p.total) : ''}${pct}`;
+}
+
 export function engineSummary(status) {
   const e = status.engine || {};
   const parts = [];
@@ -42,7 +58,7 @@ export function engineSummary(status) {
     available: '<b class="ok">ready</b>',
     downloadable: '<span class="warn">needs download (Settings)</span>',
     downloading: 'downloading…',
-    unavailable: '<span class="warn">unavailable on this device</span>',
+    unavailable: '<span class="warn">unavailable (blocked by policy, or unsupported device)</span>',
     unsupported: 'not exposed to background — runs from this popup',
   }[status.llm] || esc(status.llm);
   parts.push(`Folder discovery (built-in LLM): ${status.settings.useLLM ? llm : 'off'}`);

@@ -5,10 +5,12 @@ import { Decider } from '../engine/decider.js';
 import { resolveModel } from '../engine/models.js';
 import { selfTest } from '../engine/selftest.js';
 import { discoverCategories, llmAvailability, llmAssign } from '../engine/llm.js';
+import { createActivity } from './activity.js';
 
 let decider = null;
 let deciderKey = '';
 let lastProgress = null;
+const activity = createActivity();
 
 function getDecider(settings) {
   const model = resolveModel(settings);
@@ -91,6 +93,10 @@ const handlers = {
     return selfTest(d);
   },
 
+  'engine.idle'() {
+    return activity.idle();
+  },
+
   async 'decider.unload'() {
     await decider?.release();
     return { ok: true };
@@ -116,7 +122,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   const h = handlers[msg.type];
   if (!h) return false;
   Promise.resolve()
-    .then(() => h(msg))
+    .then(() => (msg.type === 'engine.idle' ? h(msg) : activity.run(() => h(msg))))
     .then((r) => sendResponse({ ok: true, result: r }))
     .catch((e) => {
       console.error('[TabSage offscreen]', msg.type, e);
