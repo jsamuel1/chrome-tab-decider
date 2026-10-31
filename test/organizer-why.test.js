@@ -6,6 +6,7 @@ const store = {
   state: {
     categories: {
       c1: { id: 'c1', name: 'Projects', kind: 'work', color: 'blue', pinned: false, lastActive: 0, createdAt: Date.now() },
+      daily: { id: 'daily', name: 'Daily', kind: 'personal', color: 'grey', pinned: true, lastActive: 0, createdAt: Date.now() },
     },
     profile: { company: 'Acme', companyDomains: [], projects: [], onboarded: true },
     schemaVersion: 2,
@@ -70,4 +71,27 @@ test('a tab moved in the background, or in an incognito window, is not asked why
   await learnFromUser({ ...tabs[0], active: false }, 50);
   await learnFromUser({ ...tabs[0], incognito: true }, 50);
   assert.deepEqual(injected, []);
+});
+
+test('moving the tab again withdraws the question: the card closes and its answer is not taken', async () => {
+  groupCat.set(51, 'daily');
+  // out of every group, into Daily, into a group that is no folder of ours
+  for (const next of [-1, 51, 60]) {
+    sent.length = 0;
+    await learnFromUser(tabs[0], 50);
+    const before = structuredClone(await getState());
+    assert.ok(session.why1, 'the question is kept for a worker restart');
+    sent.length = 0;
+    await learnFromUser({ ...tabs[0], groupId: next }, next);
+    assert.deepEqual(sent, [[1, { target: 'why', close: true }]], `the card stayed open after a move to ${next}`);
+    assert.equal(session.why1, undefined, `the stored question outlived a move to ${next}`);
+    assert.equal(await saveWhy(tabs[0], { optionId: 'site' }), false, `an answer to the old question was taken after a move to ${next}`);
+    const st = await getState();
+    assert.deepEqual(st.siteRules, before.siteRules, `a site rule was saved for the folder left for ${next}`);
+    assert.deepEqual(st.reasons, before.reasons, `a reason was saved for the folder left for ${next}`);
+  }
+  // a later move to a group without a question to withdraw tells the tab nothing
+  sent.length = 0;
+  await learnFromUser({ ...tabs[0], groupId: -1 }, -1);
+  assert.deepEqual(sent, []);
 });

@@ -110,6 +110,7 @@ if (!globalThis.__tabsageWhy) {
   chrome.runtime.onMessage.addListener((msg, sender) => {
     // only the extension's own service worker: not other extensions, not other tabs
     if (sender.id !== chrome.runtime.id || sender.tab || msg?.target !== 'why') return;
-    show(msg);
+    if (msg.close) close(); // the tab was moved again: that question no longer stands
+    else show(msg);
   });
 }

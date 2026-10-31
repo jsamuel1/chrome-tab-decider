@@ -399,6 +399,8 @@ export async function catForGroup(groupId) {
 
 /** The user moved a tab into one of our groups: that page stays there, and the tab asks why. */
 export async function learnFromUser(tab, groupId) {
+  // a move you make is final: any question about an earlier move is withdrawn first
+  await withdrawWhy(tab.id);
   if (groupId === -1) {
     manualTabs.add(tab.id);
     return;
@@ -437,6 +439,15 @@ async function askWhy(tab, cat, profile, host) {
       options: options.map(({ id, label }) => ({ id, label })),
     });
   } catch {} // pages the extension may not script (the Web Store, chrome:// pages)
+}
+
+// Forget the question a tab was asked, and take its card off the page.
+async function withdrawWhy(tabId) {
+  const k = `why${tabId}`;
+  const asked = whyAsked.delete(tabId) || (await chrome.storage.session?.get(k).catch(() => null))?.[k];
+  if (!asked) return;
+  await chrome.storage.session?.remove(k).catch(() => {});
+  await chrome.tabs.sendMessage(tabId, { target: 'why', close: true }).catch(() => {});
 }
 
 async function takeWhy(tabId) {
