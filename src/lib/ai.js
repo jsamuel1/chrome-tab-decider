@@ -42,7 +42,29 @@ export async function unloadIfIdle(idleMin) {
   return true;
 }
 
+// What the worker last learnt from the engine: the classifier is downloaded, and on which device it
+// runs. Kept in session storage too. A passive status check (sorting and organizing, on every tab
+// switch) is answered from it while the engine is unloaded, so the check alone neither wakes the
+// engine nor keeps it from counting as idle.
+let known = null;
+const readyKey = (settings) => JSON.stringify([settings?.model, settings?.customModel, settings?.device]);
+
+async function remember(settings, status) {
+  known = status?.downloaded ? { key: readyKey(settings), device: status.device || known?.device || '' } : null;
+  const session = chrome.storage.session;
+  await (known ? session?.set({ deciderReady: known }) : session?.remove('deciderReady'))?.catch(() => {});
+}
+
+async function knownReady(settings) {
+  if (!known) known = (await chrome.storage.session?.get('deciderReady').catch(() => null))?.deciderReady || null;
+  return known?.key === readyKey(settings) ? { downloaded: true, device: known.device, passive: true } : null;
+}
+
 async function realAi(type, payload = {}, timeoutMs = 120000) {
+  if (type === 'decider.status' && payload.passive && !(await hasOffscreen())) {
+    const r = await knownReady(payload.settings);
+    if (r) return r;
+  }
   await ensureOffscreen();
   const res = await Promise.race([
     chrome.runtime.sendMessage({ target: 'offscreen', type, ...payload }),
@@ -50,6 +72,9 @@ async function realAi(type, payload = {}, timeoutMs = 120000) {
   ]);
   if (!res) throw new Error(`${type}: no response from engine`);
   if (!res.ok) throw new Error(res.error);
+  if (type === 'decider.status') await remember(payload.settings, res.result);
+  // the model's files were cleared from the cache since: ask the engine again next time
+  else if (res.result?.error === 'not-downloaded') await remember(payload.settings, null);
   return res.result;
 }
 
@@ -64,10 +89,13 @@ export function setAiForTest(fn) {
   impl = fn || realAi;
 }
 
-/** The classifier's status, or null when the engine cannot be reached. */
-export async function deciderStatus(settings) {
+/**
+ * The classifier's status, or null when the engine cannot be reached. `passive` checks (the gate
+ * before sorting or organizing) do not wake an unloaded engine when it is known to be downloaded.
+ */
+export async function deciderStatus(settings, { passive = false } = {}) {
   try {
-    return (await ai('decider.status', { settings }, 15000)) || null;
+    return (await ai('decider.status', { settings, ...(passive ? { passive } : {}) }, 15000)) || null;
   } catch {
     return null;
   }
@@ -75,5 +103,5 @@ export async function deciderStatus(settings) {
 
 /** True only once the classifier is downloaded; with no model TabSage leaves every tab alone. */
 export async function classifierReady(settings, status) {
-  return !!(status === undefined ? await deciderStatus(settings) : status)?.downloaded;
+  return !!(status === undefined ? await deciderStatus(settings, { passive: true }) : status)?.downloaded;
 }

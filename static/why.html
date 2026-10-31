@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TabSage</title>
+    <style>
+      html, body { margin: 0; background: transparent; }
+      .card {
+        box-sizing: border-box; width: 300px; padding: 12px; border-radius: 12px;
+        background: #fff; color: #1d2330; border: 1px solid #e6e8ec;
+        font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .top { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+      .q { flex: 1; font-weight: 600; }
+      .x { border: 0; background: none; color: #6b7280; padding: 0 4px; font-size: 16px; line-height: 1; cursor: pointer; }
+      .answers { display: flex; flex-direction: column; gap: 6px; }
+      button.a {
+        text-align: left; font: inherit; color: inherit; background: #fff; cursor: pointer;
+        border: 1px solid #e6e8ec; border-radius: 8px; padding: 6px 10px;
+      }
+      button.a:hover { background: #f2f4f7; }
+      input {
+        box-sizing: border-box; width: 100%; margin-top: 8px; padding: 6px 10px; font: inherit; color: inherit;
+        background: #fff; border: 1px solid #e6e8ec; border-radius: 8px;
+      }
+      button:focus-visible, input:focus { outline: 2px solid #2563eb; outline-offset: 1px; }
+      .brand { margin-top: 6px; color: #6b7280; font-size: 11px; }
+      @media (prefers-color-scheme: dark) {
+        .card, button.a, input { background: #1b1e24; color: #e8eaf0; border-color: #2d323c; }
+        button.a:hover { background: #262a33; }
+        .x, .brand { color: #9aa3b2; }
+        button:focus-visible, input:focus { outline-color: #7aa2ff; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card" role="dialog" aria-label="TabSage" hidden>
+      <div class="top"><div class="q" id="q"></div><button class="x" id="x" type="button" aria-label="Dismiss">×</button></div>
+      <div class="answers" id="answers"></div>
+      <form id="form"><input id="text" type="text" maxlength="200" placeholder="Or say why in your own words" aria-label="Why, in your own words" /></form>
+      <div class="brand">TabSage</div>
+    </div>
+    <script type="module" src="why-frame.js"></script>
+  </body>
+</html>

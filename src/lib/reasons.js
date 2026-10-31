@@ -28,10 +28,9 @@ export function applyReason(st, { url, catId, optionId, text, scope }, at = Date
   const key = pageKey(url);
   const host = hostOf(key);
   const site = scope === 'site' && host;
-  if (site) {
-    // the reason behind an earlier rule for this site no longer holds
-    st.reasons = st.reasons.filter((r) => !(r.scope === 'site' && r.host === host));
-  }
+  // an earlier answer about this page no longer holds, and nor does the reason behind an earlier
+  // rule for this site when the new answer covers the site
+  st.reasons = st.reasons.filter((r) => !(r.scope === 'page' && r.url && r.url === key) && !(site && r.scope === 'site' && r.host === host));
   const reason = {
     id: uid('r'), catId, optionId, text: String(text || '').trim().slice(0, MAX_TEXT), scope: site ? 'site' : 'page', host, url: key, at,
   };
@@ -51,3 +50,24 @@ export function deleteReason(st, id) {
   }
   return st;
 }
+
+function shortPage(url) {
+  try {
+    const u = new URL(url);
+    const s = `${hostOf(url)}${u.pathname === '/' ? '' : u.pathname}`;
+    return s.length > 48 ? `${s.slice(0, 47)}…` : s;
+  } catch {
+    return '';
+  }
+}
+
+/** One line for a reason in Settings: what was said, the folder it was said for, and the page or site. */
+export function describeReason(r, categories) {
+  const folder = categories?.[r.catId]?.name || (Array.isArray(categories) ? categories.find((c) => c.id === r.catId)?.name : '');
+  const where = r.scope === 'site' && r.host ? `everything on ${r.host}` : shortPage(r.url);
+  return [r.text, folder, where].filter(Boolean).join(' — ');
+}
+
+/** Reasons as Settings lists them: the newest first. */
+export const newestFirst = (reasons) => [...(reasons || [])].sort((a, b) => (b.at || 0) - (a.at || 0));
+

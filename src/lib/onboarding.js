@@ -81,12 +81,12 @@ export function withoutNames(names, taken) {
  * name, or a category with a project's name, is left out. Run again, it renames the company folder
  * rather than making a second one.
  */
-export function saveProfile(st, answers) {
+export function saveProfile(st, answers, at = Date.now()) {
   const a = answers || {};
   const name = String(a.company || '').trim();
   // Each name is one folder, so the company outranks a project, and a project outranks a category.
   const projects = withoutNames(a.projects, [name]);
-  st.profile = {
+  const next = {
     company: name,
     companyDomains: [...new Set(clean(a.companyDomains).map((d) => d.toLowerCase()))],
     work: String(a.work || '').trim(),
@@ -95,6 +95,10 @@ export function saveProfile(st, answers) {
     categories: withoutNames(a.categories, [name, ...projects]),
     onboarded: true,
   };
+  // Filed pages are decided again (at a quiet moment) only when what the classifier sees has changed.
+  const prev = st.profile || {};
+  const same = JSON.stringify({ ...prev, updatedAt: 0 }) === JSON.stringify({ ...next, updatedAt: 0 });
+  st.profile = { ...next, updatedAt: same ? prev.updatedAt || 0 : at };
   const p = st.profile;
   let company = null;
   if (p.company) {

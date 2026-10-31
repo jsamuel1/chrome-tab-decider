@@ -16,6 +16,16 @@ export function detailsKey(sender, url, windowType) {
   return key && key === pageKey(realUrl(tab)) ? key : null;
 }
 
+const DETAIL_KEYS = ['title', 'description', 'siteName', 'ogTitle', 'h1', 'lang'];
+
+/** Page details as a content script reported them, cut back to the known items, each a string of at most 200 characters. */
+export function cleanDetails(details) {
+  if (!details || typeof details !== 'object') return null;
+  const out = {};
+  for (const k of DETAIL_KEYS) out[k] = typeof details[k] === 'string' ? details[k].slice(0, 200) : '';
+  return out;
+}
+
 /** Forget pages that are no longer open in a tracked tab. `tabs` are the tabs of normal windows. */
 export function pruneTabMeta(st, tabs) {
   const open = new Set(tabs.filter((t) => tracked(t)).map((t) => pageKey(realUrl(t))));

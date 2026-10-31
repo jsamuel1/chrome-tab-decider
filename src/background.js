@@ -1,7 +1,7 @@
 // TabSage service worker: wires Chrome events to the organizer, sorter, persistence and archive.
 
-import { getSettings, setSettings, getState, updateState, flushState, DEFAULT_SETTINGS } from './lib/store.js';
-import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat, markActivity, saveWhy, noteTabClosed, noteUnpinned, notePinnedNavigated } from './lib/organizer.js';
+import { getSettings, setSettings, getState, updateState, flushState, regroups, DEFAULT_SETTINGS } from './lib/store.js';
+import { organize, learnFromUser, expectedGroupChange, clearManual, catForGroup, groupCat, markActivity, saveWhy, whyQuestion, noteTabClosed, noteUnpinned, notePinnedNavigated } from './lib/organizer.js';
 import { deleteReason as removeReason } from './lib/reasons.js';
 import { reviewFolder as review } from './lib/review.js';
 import { sortAll } from './lib/sorter.js';
@@ -12,7 +12,8 @@ import { modelError } from './engine/models.js';
 import { hostOf, isGroupable, realUrl, pageKey } from './lib/urls.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
 import { isRename, nameFromTitle } from './lib/grouping.js';
-import { detailsCount, detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
+import { cleanDetails, detailsCount, detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
+import { allowed } from './lib/senders.js';
 import { recordUse, pruneUsage } from './lib/usage.js';
 import { bookmarkFolders } from './lib/bookmarks.js';
 import { onboardingSuggestions, saveProfile } from './lib/onboarding.js';
@@ -141,7 +142,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (info.status === 'complete' || info.url || info.title) {
     if (info.url) {
       markActivity();
-      manualTabs.delete(tabId); // navigated somewhere new: eligible again
+      clearManual(tabId); // navigated somewhere new: eligible again
       scheduleTidy();
     }
     scheduleOrganize('tab-updated');
@@ -168,7 +169,7 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId, { isWindowClosing }) => {
-  manualTabs.delete(tabId);
+  clearManual(tabId);
   markActivity();
   if (isWindowClosing) return; // window/browser closing: keep the snapshot as-is for restore
   noteTabClosed(tabId);
@@ -272,10 +273,10 @@ const api = {
     }, { immediate: true });
     await organize({ reason: 'forget-domain' });
   },
-  // From the "Why?" card: only the page's own top frame, answering the question its tab was asked.
+  // From the "Why?" card's frame (the router lets only it ask): the question its tab was asked, and the answer.
+  whyQuestion: (_, sender) => whyQuestion(sender.tab),
   async saveReason({ optionId, text }, sender) {
-    if (sender?.id !== chrome.runtime.id || !sender.tab || sender.frameId !== 0) return false;
-    return saveWhy(sender.tab, { optionId, text });
+    return saveWhy(sender.tab, { optionId: String(optionId ?? ''), text: typeof text === 'string' ? text.slice(0, 200) : '' });
   },
   async reviewFolder(args) {
     await updateState((st) => { review(st, args); }, { immediate: true });
@@ -285,8 +286,9 @@ const api = {
     await updateState((st) => { removeReason(st, id); }, { immediate: true });
     await organize({ reason: 'delete-reason' });
   },
-  async pageDetails({ url, details }, sender) {
-    if (!details || sender?.tab?.incognito) return;
+  async pageDetails({ url, details: reported }, sender) {
+    const details = cleanDetails(reported);
+    if (!details || typeof url !== 'string' || sender?.tab?.incognito) return;
     const win = sender?.tab && await chrome.windows.get(sender.tab.windowId).catch(() => null);
     const key = detailsKey(sender, url, win?.type);
     if (!key) return;
@@ -305,7 +307,7 @@ const api = {
   getSettings: () => getSettings(),
   async setSettings({ patch }) {
     const s = await setSettings(patch);
-    if ('maxGroups' in patch || 'otherGroupName' in patch) organize({ reason: 'settings' });
+    if (regroups(patch)) organize({ reason: 'settings' });
     if ('groupSort' in patch || 'tabSort' in patch) sortAll();
     if ('model' in patch || 'customModel' in patch || patch.autoDownload) prefetchModel('settings');
     return s;
@@ -329,8 +331,12 @@ const api = {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.target !== 'background') return false;
-  const h = api[msg.type];
+  const h = Object.hasOwn(api, msg.type) && api[msg.type];
   if (!h) return false;
+  if (!allowed(msg.type, sender)) {
+    sendResponse({ ok: false, error: 'not allowed' });
+    return false;
+  }
   Promise.resolve()
     .then(() => h(msg, sender))
     .then((r) => sendResponse({ ok: true, result: r }))

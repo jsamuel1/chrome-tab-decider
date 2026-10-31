@@ -8,7 +8,7 @@
   </head>
   <body class="options">
     <h1>TabSage</h1>
-    <div class="muted">Auto-groups your tabs by domain and topic, sorted dynamically, persisted across restarts. Everything runs on this device.</div>
+    <div class="muted">Puts each of your tabs in a folder that fits the page, shows the folders as tab groups, and keeps them across restarts. Everything runs on this device.</div>
 
     <h2>Your profile</h2>
     <div class="card">
@@ -96,12 +96,12 @@
           <span id="llmStatus" class="muted"></span>
           <button id="prepareLLM" hidden>Download Gemini Nano</button>
         </div>
-        <div class="help">One pass over all tab titles proposes folder names; the decider then files each domain into one of them. Falls back to keyword extraction.</div>
+        <div class="help">When it is there, Chrome's built-in model may suggest names for new folders from your tab titles. The classifier checks each name before a folder is made, and decides where each page goes.</div>
       </div>
       <div class="field">
         <label for="minConfidence">Min. confidence</label>
         <input type="number" id="minConfidence" data-key="minConfidence" min="0" max="1" step="0.05" />
-        <div class="help">Below this the domain goes to the Other group.</div>
+        <div class="help">When the classifier is less sure than this about a page, the page goes to the Other group.</div>
       </div>
       <div class="field">
         <label for="idleUnloadMin">Unload model after idle (min)</label>
@@ -114,7 +114,17 @@
       <div class="field">
         <label for="maxGroups">Top categories (groups)</label>
         <input type="number" id="maxGroups" data-key="maxGroups" min="2" max="20" />
-        <div class="help">Smaller categories fold into the Other group. Pinned groups always count.</div>
+        <div class="help">When more folders have open tabs than this, the smallest ones fold into the folder above them: a work folder into your company's group, a personal folder into its category. Other is only for pages that fit nothing. The Daily group does not count, and starred (★) folders fold last.</div>
+      </div>
+      <div class="field">
+        <label for="pinnedMax">Pinned tabs (most used)</label>
+        <input type="number" id="pinnedMax" data-key="pinnedMax" min="0" max="20" />
+        <div class="help">How many of the pages you use most TabSage keeps as pinned tabs. 0 turns this off. Tabs you pin yourself are never touched.</div>
+      </div>
+      <div class="field">
+        <label for="dailyMax">Daily group size</label>
+        <input type="number" id="dailyMax" data-key="dailyMax" min="0" max="30" />
+        <div class="help">How many of the next most-used pages go in the Daily group, which always comes first. 0 turns the Daily group off.</div>
       </div>
       <div class="field">
         <label for="otherGroupName">Name of the catch-all group</label>
@@ -198,14 +208,14 @@
     <h2>Folders &amp; learned domains</h2>
     <div class="card">
       <table>
-        <thead><tr><th>Folder</th><th>Domains (click to forget)</th><th></th></tr></thead>
+        <thead><tr><th>Folder</th><th>Belongs under</th><th>Sites you bound here (click to forget)</th><th></th></tr></thead>
         <tbody id="cats"></tbody>
       </table>
       <div style="display:flex;gap:6px;margin-top:10px">
         <input type="text" id="newCat" placeholder="Add a folder…" />
         <button id="addCat">Add</button>
       </div>
-      <div class="muted small" style="margin-top:8px">Drag a tab into a different group and TabSage remembers that for the whole domain.</div>
+      <div class="muted small" style="margin-top:8px">Move a tab into a different group and TabSage keeps that page there. It covers the whole site only if you choose that answer when TabSage asks why.</div>
     </div>
 
     <h2>New folders</h2>

@@ -82,3 +82,47 @@ test('progressText shows file, bytes and overall share', () => {
   );
   assert.equal(progressText({ file: 'session', stage: 'compiling', overall: 1 }), 'Creating WebGPU session…');
 });
+
+test('a status check does not count as using the engine, so it cannot keep an idle model loaded', async () => {
+  const { handle } = await import('../src/offscreen/activity.js');
+  let t = 0;
+  const a = createActivity(() => t);
+  await handle(a, 'decider.choice', async () => 'answer');
+  t += 11 * 60000;
+  assert.equal(await handle(a, 'decider.status', async () => ({ downloaded: true })).then((r) => r.downloaded), true);
+  assert.deepEqual(a.idle(), { busy: 0, idleMs: 11 * 60000 }, 'a status check reset the idle clock');
+  await handle(a, 'decider.choice', async () => 'answer');
+  assert.deepEqual(a.idle(), { busy: 0, idleMs: 0 });
+});
+
+test('once the classifier is known to be downloaded, the gate check does not start an unloaded engine', async () => {
+  const { classifierReady, deciderStatus } = await import('../src/lib/ai.js');
+  const session = {};
+  const log = { created: 0, sent: [] };
+  let open = true;
+  globalThis.chrome = {
+    storage: { session: { get: async (k) => ({ [k]: session[k] }), set: async (o) => Object.assign(session, o), remove: async (k) => { delete session[k]; } } },
+    runtime: {
+      getURL: (p) => `chrome-extension://id/${p}`,
+      getContexts: async () => (open ? [{ contextType: 'OFFSCREEN_DOCUMENT' }] : []),
+      sendMessage: async (msg) => {
+        log.sent.push(msg.type);
+        return { ok: true, result: { downloaded: true, device: 'webgpu' } };
+      },
+    },
+    offscreen: { createDocument: async () => { log.created++; open = true; }, closeDocument: async () => { open = false; } },
+  };
+  const settings = { model: 'decider-v1-2610-q4f16', device: 'webgpu' };
+  assert.equal(await classifierReady(settings), true);
+  assert.deepEqual(log.sent, ['decider.status']);
+
+  open = false; // unloaded after being idle
+  assert.equal(await classifierReady(settings), true);
+  assert.equal((await deciderStatus(settings, { passive: true })).device, 'webgpu');
+  assert.equal(log.created, 0, 'a gate check created the engine again');
+  assert.deepEqual(log.sent, ['decider.status'], 'a gate check woke the engine');
+
+  // other settings (another model) are asked about afresh
+  assert.equal(await classifierReady({ ...settings, model: 'other' }), true);
+  assert.equal(log.created, 1);
+});

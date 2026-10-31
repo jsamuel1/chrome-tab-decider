@@ -34,6 +34,7 @@ const opts = {
     options: 'src/options/options.js',
     onboarding: 'src/onboarding/onboarding.js',
     lazy: 'src/lazy/lazy.js',
+    'why-frame': 'src/why/frame.js',
   },
   outdir: 'dist',
   bundle: true,

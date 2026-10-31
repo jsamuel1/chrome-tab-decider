@@ -33,7 +33,7 @@ globalThis.chrome = {
   alarms: { create: () => {} },
 };
 
-const { learnFromUser, saveWhy, groupCat } = await import('../src/lib/organizer.js');
+const { learnFromUser, saveWhy, whyQuestion, groupCat } = await import('../src/lib/organizer.js');
 const { setAiForTest } = await import('../src/lib/ai.js');
 const { getState } = await import('../src/lib/store.js');
 setAiForTest(async (type) => (type === 'decider.status' ? { downloaded: true, device: 'webgpu' } : { error: 'not in test' }));
@@ -45,11 +45,14 @@ test('moving a tab fixes the page, binds no site, and shows the card in that tab
   assert.equal(st.pageMap['https://docs.acme.com/a'].fixed, true);
   assert.deepEqual(st.siteRules, {});
   assert.deepEqual(injected, [{ target: { tabId: 1 }, files: ['why.js'] }]);
-  const [[tabId, msg]] = sent;
-  assert.equal(tabId, 1);
-  assert.equal(msg.question, 'Why does this belong in Acme · Projects?');
-  assert.deepEqual(msg.options.map((o) => o.label), ["Part of Projects", "It's for Acme", 'Everything on docs.acme.com, not just this page']);
-  assert.ok(msg.options.every((o) => !('scope' in o)), 'the page learns more than the labels');
+  // the page is only told to make room for the card's frame: the question never passes through it
+  assert.deepEqual(sent, [[1, { target: 'why', show: true }]]);
+  const ask = await whyQuestion(tabs[0]);
+  assert.equal(ask.question, 'Why does this belong in Acme · Projects?');
+  assert.deepEqual(ask.options.map((o) => o.label), ["Part of Projects", "It's for Acme", 'Everything on docs.acme.com, not just this page']);
+  assert.ok(ask.options.every((o) => Object.keys(o).join() === 'id,label'), 'the card learns more than the labels');
+  assert.equal(await whyQuestion({ ...tabs[0], url: 'https://elsewhere.com/' }), null, 'a tab on another page was given the question');
+  assert.equal(await whyQuestion({ ...tabs[0], id: 2 }), null, 'another tab was given the question');
 });
 
 test('an answer the tab was not offered is ignored, and so is a second answer', async () => {

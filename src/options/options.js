@@ -1,4 +1,5 @@
 import { bg, engine, esc, fmtBytes, progressText } from '../lib/ui-common.js';
+import { describeReason, newestFirst } from '../lib/reasons.js';
 import { MODELS } from '../engine/models.js';
 import { llmAvailability, prepareLLM } from '../engine/llm.js';
 
@@ -82,7 +83,7 @@ async function modelStatus() {
     if (e.error) $('modelStatus').textContent = `Error: ${e.error}`;
     else if (e.loaded) $('modelStatus').innerHTML = `<b>Loaded</b> on ${esc(e.device)}${e.webgpu ? '' : ' (no WebGPU in this browser)'}`;
     else if (e.downloaded) $('modelStatus').textContent = 'Downloaded — loads automatically when needed.';
-    else $('modelStatus').textContent = 'Not downloaded. Until then TabSage uses the built-in LLM or keyword matching.';
+    else $('modelStatus').textContent = 'Not downloaded. TabSage leaves your tabs alone until it is.';
   } catch (err) {
     $('modelStatus').textContent = err.message;
   }
@@ -162,6 +163,14 @@ chrome.runtime.onMessage.addListener((m) => {
   }
 });
 
+// "Belongs under": the company (its folders are work) or one of the high-level personal folders.
+function placeSelect(c, all) {
+  if (c.kind === 'company' || c.source === 'system') return '<span class="muted">—</span>';
+  const tops = all.filter((o) => o.id !== c.id && (o.kind === 'company' || (o.kind === 'personal' && !o.parentId && o.source !== 'system')));
+  const opt = (id, label) => `<option value="${esc(id)}" ${(c.parentId || '') === id ? 'selected' : ''}>${esc(label)}</option>`;
+  return `<select data-place="${esc(c.id)}">${opt('', 'Nothing (its own folder)')}${tops.map((o) => opt(o.id, o.kind === 'company' ? `${o.name} (work)` : o.name)).join('')}</select>`;
+}
+
 async function cats() {
   const s = await bg('status');
   $('cats').innerHTML = s.categories.map((c) => `
@@ -169,7 +178,8 @@ async function cats() {
       <td><span class="dot" style="display:inline-block;background:var(--g-${c.color})"></span>
         <input type="text" value="${esc(c.name)}" data-rename="${c.id}" style="width:auto;display:inline-block;padding:3px 6px" ${c.id === 'other' ? 'disabled' : ''}/>
         ${c.pinned ? '★' : ''}</td>
-      <td><div class="chips">${c.domains.map((d) => `<span class="chip" data-forget="${esc(d)}" title="Forget — re-classify next time">${esc(d)}</span>`).join('') || '<span class="muted">—</span>'}</div></td>
+      <td>${placeSelect(c, s.categories)}</td>
+      <td><div class="chips">${c.domains.map((d) => `<span class="chip" data-forget="${esc(d)}" title="Forget: pages on this site are decided one by one again">${esc(d)}</span>`).join('') || '<span class="muted">—</span>'}</div></td>
       <td>${c.id === 'other' ? '' : `<button data-del="${c.id}">Delete</button>`}</td>
     </tr>`).join('');
 }
@@ -177,9 +187,11 @@ $('cats').addEventListener('click', async (e) => {
   const f = e.target.closest('[data-forget]');
   if (f) { await bg('forgetDomain', { domain: f.dataset.forget }); return cats(); }
   const d = e.target.closest('[data-del]');
-  if (d && confirm('Delete this folder? Its domains will be re-classified.')) { await bg('deleteCategory', { catId: d.dataset.del }); cats(); }
+  if (d && confirm('Delete this folder? Its pages will be decided again, and the sites you bound to it are let go.')) { await bg('deleteCategory', { catId: d.dataset.del }); cats(); }
 });
 $('cats').addEventListener('change', async (e) => {
+  const p = e.target.closest('[data-place]');
+  if (p) { await bg('reviewFolder', { catId: p.dataset.place, action: 'place', intoId: p.value }); cats(); review(); return; }
   const r = e.target.closest('[data-rename]');
   if (r && r.value.trim()) { await bg('renameCategory', { catId: r.dataset.rename, name: r.value.trim() }); cats(); }
 });
@@ -195,11 +207,12 @@ async function review() {
         <button data-keep>Keep</button>
         <button data-rename>Rename</button>
         <select data-merge><option value="">Merge into…</option>${s.categories.filter((o) => o.id !== c.id && o.id !== 'daily' && !o.isNew).map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>
+        <label class="small muted">Belongs under ${placeSelect(c, s.categories)}</label>
       </td>
     </tr>`).join('');
   $('reasonsNone').hidden = s.reasons.length > 0;
-  $('reasons').innerHTML = s.reasons.map((r) => `
-    <tr><td>${esc(r.text)}</td><td><button data-delreason="${r.id}">Delete</button></td></tr>`).join('');
+  $('reasons').innerHTML = newestFirst(s.reasons).map((r) => `
+    <tr><td>${esc(describeReason(r, s.categories))}</td><td><button data-delreason="${r.id}">Delete</button></td></tr>`).join('');
 }
 async function reviewAction(e) {
   const row = e.target.closest('[data-new]');
@@ -207,8 +220,17 @@ async function reviewAction(e) {
   const catId = row.dataset.new;
   if (e.target.matches('[data-keep]')) await bg('reviewFolder', { catId, action: 'keep' });
   else if (e.target.matches('[data-rename]')) await bg('reviewFolder', { catId, action: 'rename', name: row.querySelector('[data-newname]').value });
-  else if (e.target.matches('[data-merge]') && e.target.value) await bg('reviewFolder', { catId, action: 'merge', intoId: e.target.value });
-  else return;
+  else if (e.target.matches('[data-place]') && e.type === 'change') await bg('reviewFolder', { catId, action: 'place', intoId: e.target.value });
+  else if (e.target.matches('[data-merge]') && e.target.value && e.type === 'change') {
+    // merging cannot be undone, so a stray arrow key on the list must not do it
+    const name = row.querySelector('[data-newname]').value;
+    const target = e.target.selectedOptions[0]?.textContent || '';
+    if (!confirm(`Merge ${name} into ${target}? Its tabs move there, and ${name} is gone for good.`)) {
+      e.target.value = '';
+      return;
+    }
+    await bg('reviewFolder', { catId, action: 'merge', intoId: e.target.value });
+  } else return;
   cats();
   review();
 }

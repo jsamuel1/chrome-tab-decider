@@ -52,9 +52,26 @@ export async function getSettings() {
   return { ...DEFAULT_SETTINGS, ...(settings || {}) };
 }
 
+// Settings with a range: a value from Settings is rounded and kept inside it (0 turns the feature off).
+const RANGES = { pinnedMax: [0, 20], dailyMax: [0, 30] };
+
+/** `patch` with its numbers kept in their ranges. */
+export function cleanSettings(patch) {
+  const out = { ...patch };
+  for (const [k, [lo, hi]] of Object.entries(RANGES)) {
+    if (!(k in out)) continue;
+    const n = Math.round(Number(out[k]));
+    out[k] = Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : DEFAULT_SETTINGS[k];
+  }
+  return out;
+}
+
+/** True when a change to these settings changes how tabs are grouped or pinned, so tabs are organized again. */
+export const regroups = (patch) => ['maxGroups', 'otherGroupName', 'pinnedMax', 'dailyMax'].some((k) => k in (patch || {}));
+
 export async function setSettings(patch) {
   const s = await getSettings();
-  const next = { ...s, ...patch };
+  const next = { ...s, ...cleanSettings(patch) };
   await chrome.storage.local.set({ settings: next });
   return next;
 }
@@ -66,6 +83,8 @@ export function setSiteRule(st, host, catId, at = Date.now()) {
   const cur = st.siteRules[host];
   if (cur && cur.catId === catId) return cur;
   const reason = { id: uid('r'), catId, text: 'Moved here by hand', scope: 'site', host, url: '', at };
+  // the reason behind an earlier rule for this site no longer holds
+  st.reasons = st.reasons.filter((r) => !(r.scope === 'site' && r.host === host));
   st.reasons.push(reason);
   st.siteRules[host] = { catId, reasonId: reason.id };
   return st.siteRules[host];

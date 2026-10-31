@@ -15,13 +15,29 @@ import { carryUse, planPins, startCooldown } from './usage.js';
 
 // Tab group changes we caused (so they aren't mistaken for the user teaching us).
 export const expectedGroupChange = new Map(); // tabId -> groupId | '*'
-// Tabs the user pulled out of a group by hand this session: leave them alone.
+// Tabs the user pulled out of a group by hand this session: leave them alone. Kept in session
+// storage too, as the service worker restarts after half a minute idle.
 export const manualTabs = new Set();
+
+async function loadManualTabs() {
+  const stored = (await chrome.storage.session?.get('manualTabs').catch(() => null))?.manualTabs || [];
+  for (const id of stored) manualTabs.add(id);
+}
+
+const saveManualTabs = () => chrome.storage.session?.set({ manualTabs: [...manualTabs] }).catch(() => {});
+
+/** The tab went to a new page or was closed: it is TabSage's to file again. */
+export async function clearManual(tabId) {
+  await loadManualTabs();
+  if (manualTabs.delete(tabId)) await saveManualTabs();
+}
 // groupId -> catId for this browser session (group ids are not stable across restarts).
 export const groupCat = new Map();
 
 const QUIET_MS = 2 * 60 * 1000;   // filed pages are only re-decided after this long without tab or group events
 const SLOW_BUDGET = 5;            // decisions per run on the WebAssembly engine
+const FAST_BUDGET = 30;           // decisions per run on the GPU
+const TIME_BUDGET = 20 * 1000;    // and no run decides for longer than this
 const ACCEPT = 0.6;               // P(true) a discovered folder name needs
 const DISCOVER_EVERY = 10 * 60 * 1000;
 const MAX_TERMS = 6;
@@ -72,6 +88,13 @@ export function organize(opts = {}) {
 const expectedUnpin = new Set();
 
 const realCats = (st) => Object.values(st.categories).filter((c) => c.id !== OTHER_ID && c.id !== DAILY_ID);
+
+// Folders the user set up (in onboarding, Settings or by naming a group) stay even when nothing is in them.
+function ownedByUser(st, c) {
+  if (c.kind === 'company' || c.source === 'user') return true;
+  const names = [...(st.profile?.projects || []), ...(st.profile?.categories || [])].map((n) => n.toLowerCase());
+  return names.includes(c.name.toLowerCase());
+}
 const keyOf = (t) => pageKey(realUrl(t));
 
 function catByTitle(st, title) {
@@ -141,20 +164,59 @@ function folderState(st, texts) {
   return `${who ? `${who}\n\n` : ''}Browser tabs:\n${lines.join('\n')}`.slice(0, 1499);
 }
 
+const yesOf = (r) => r.probs?.[r.labels.indexOf('true')] ?? 0;
+
+/**
+ * Where a new folder belongs: under the company when it is work for it, else under the high-level
+ * personal category it fits (one the user chose), else on its own.
+ */
+async function placeFolder(st, settings, name, texts) {
+  const state = folderState(st, texts);
+  const companyName = String(st.profile?.company || '').trim();
+  const company = Object.values(st.categories).find((c) => c.kind === 'company');
+  try {
+    if (company && companyName) {
+      const r = await ai('decider.noul', {
+        settings, state, instructions: `Is a folder named "${name}" holding these browser tabs work for ${companyName}?`,
+      }, LONG);
+      if (!r.error && yesOf(r) >= ACCEPT) return { kind: 'work', parentId: company.id };
+    }
+    const chosen = new Set((st.profile?.categories || []).map((n) => n.toLowerCase()));
+    const tops = realCats(st).filter((c) => c.kind === 'personal' && !c.parentId && chosen.has(c.name.toLowerCase())
+      && c.name.toLowerCase() !== name.toLowerCase());
+    if (tops.length) {
+      const options = [...tops, { name: 'None of these', description: '' }];
+      const r = await ai('decider.choice', {
+        settings, state,
+        instructions: `Which of these categories does a folder named "${name}" belong under?`,
+        options: options.map((c) => ({ name: c.name, description: c.description || '' })),
+      }, LONG);
+      const i = r.error ? -1 : r.labels.indexOf(r.choice);
+      if (i >= 0 && i < tops.length && r.confidence >= settings.minConfidence) return { kind: 'personal', parentId: tops[i].id };
+    }
+  } catch (e) {
+    console.warn('[TabSage] folder placement failed', e);
+  }
+  return { kind: 'personal', parentId: null };
+}
+
 /**
  * New folders from the user's own tabs: terms several pages in Other share but most open pages do not,
- * plus names from Chrome's built-in model when it is there. The classifier accepts or rejects each name.
+ * plus names from Chrome's built-in model when it is there (`proposed` are names it gave the popup).
+ * The classifier accepts or rejects each name, and places the ones it accepts.
  */
-async function discover(st, settings, pages, inOther) {
+async function discover(st, settings, pages, inOther, proposed = []) {
   const text = new Map(pages.map((t) => [keyOf(t), pageText(t, st.tabMeta[keyOf(t)]?.details)]));
   const otherKeys = inOther.map(keyOf);
+  const llmKeys = otherKeys.length ? otherKeys : pages.map(keyOf);
   const names = candidateTerms(pages.map((t) => ({ id: keyOf(t), text: text.get(keyOf(t)) })), { max: 24 })
     .map((c) => ({ term: c.term, keys: c.docIds.filter((id) => otherKeys.includes(id)) }))
     .filter((c) => c.keys.length >= 2)
     .slice(0, MAX_TERMS)
     .map((c) => ({ name: displayName(c.term, c.keys.map((k) => text.get(k))), description: '', keys: c.keys }));
+  for (const c of proposed) names.push({ name: c?.name, description: c?.description || '', keys: llmKeys });
 
-  if (settings.useLLM) {
+  if (settings.useLLM && !proposed.length && inOther.length) {
     try {
       const items = inOther.map((t) => ({ domain: hostOf(realUrl(t)), title: text.get(keyOf(t)).split('\n')[0] }));
       const existing = realCats(st).map((c) => ({ name: c.name, description: c.description }));
@@ -167,18 +229,20 @@ async function discover(st, settings, pages, inOther) {
 
   const added = [];
   for (const c of names) {
-    const name = String(c.name || '').trim();
+    const name = String(c.name || '').trim().slice(0, 80);
     if (!name || findByName(st, name) || rejected.has(name.toLowerCase())) continue;
+    const texts = c.keys.map((k) => text.get(k)).filter(Boolean);
     try {
       const r = await ai('decider.noul', {
         settings,
-        state: folderState(st, c.keys.map((k) => text.get(k))),
+        state: folderState(st, texts),
         instructions: `Would "${name}" be a sensible name for a folder holding these browser tabs?`,
       }, LONG);
       if (r.error) break;
-      const yes = r.probs?.[r.labels.indexOf('true')] ?? 0;
-      if (yes >= ACCEPT) added.push(...mergeCategories(st, [{ name, description: c.description, isNew: true }], 'discovered'));
-      else rejected.add(name.toLowerCase());
+      if (yesOf(r) >= ACCEPT) {
+        const where = await placeFolder(st, settings, name, texts);
+        added.push(...mergeCategories(st, [{ name, description: String(c.description || '').slice(0, 200), isNew: true, ...where }], 'discovered'));
+      } else rejected.add(name.toLowerCase());
     } catch (e) {
       console.warn('[TabSage] folder check failed', e);
       break;
@@ -188,8 +252,8 @@ async function discover(st, settings, pages, inOther) {
   return added;
 }
 
-/** Adopt user-created, named groups as categories. */
-async function adoptUserGroups(st) {
+/** Adopt user-created, named groups as categories, placed under the company or a category. */
+async function adoptUserGroups(st, settings) {
   const groups = await chrome.tabGroups.query({});
   for (const g of groups) {
     if (groupCat.has(g.id)) {
@@ -200,7 +264,18 @@ async function adoptUserGroups(st) {
     }
     if (!g.title) continue;
     let cat = catByTitle(st, g.title);
-    if (!cat) [cat] = mergeCategories(st, [{ name: g.title, description: '', color: g.color }], 'user');
+    if (!cat) {
+      const company = String(st.profile?.company || '').trim();
+      const companyCat = Object.values(st.categories).find((c) => c.kind === 'company');
+      const prefix = `${company} · `;
+      if (company && companyCat && g.title.startsWith(prefix) && g.title.length > prefix.length) {
+        [cat] = mergeCategories(st, [{ name: g.title.slice(prefix.length), description: '', color: g.color, kind: 'work', parentId: companyCat.id }], 'user');
+      } else {
+        const inGroup = (await chrome.tabs.query({ groupId: g.id })).filter((t) => t.groupId === g.id);
+        const where = await placeFolder(st, settings, g.title, inGroup.map((t) => pageText(t, st.tabMeta[keyOf(t)]?.details)));
+        [cat] = mergeCategories(st, [{ name: g.title, description: '', color: g.color, ...where }], 'user');
+      }
+    }
     groupCat.set(g.id, cat.id);
   }
 }
@@ -208,19 +283,20 @@ async function adoptUserGroups(st) {
 async function _organize({ rediscover = false, categories = null, reason = '' } = {}) {
   const settings = await getSettings();
   if (!settings.enabled) return;
-  const status = await deciderStatus(settings);
+  const status = await deciderStatus(settings, { passive: true });
   if (!(await classifierReady(settings, status))) return { skipped: 'model-not-ready' };
   const st = await getState();
   ensureOther(st, settings);
-  await adoptUserGroups(st);
-  if (categories?.length) mergeCategories(st, categories, 'llm');
+  await loadManualTabs();
+  await adoptUserGroups(st, settings);
 
-  // tabs sitting in an unnamed group the user made by hand, or pulled out by hand: leave them be
-  const eligible = (tabs) => tabs.filter((t) => isGroupable(t) && !manualTabs.has(t.id) && (t.groupId === -1 || groupCat.has(t.groupId)));
+  // incognito tabs, tabs sitting in an unnamed group the user made by hand, or pulled out by hand: leave them be
+  const ours = (t) => isGroupable(t) && !t.incognito && !manualTabs.has(t.id);
+  const eligible = (tabs) => tabs.filter((t) => ours(t) && (t.groupId === -1 || groupCat.has(t.groupId)));
   const all = await chrome.tabs.query({ windowType: 'normal' });
   const candidates = eligible(all);
   const now = Date.now();
-  for (const t of all.filter((t) => isGroupable(t) && !manualTabs.has(t.id))) {
+  for (const t of all.filter(ours)) {
     const u = keyOf(t);
     if (!st.tabMeta[u]) st.tabMeta[u] = { firstSeen: now, lastAccessed: t.lastAccessed || now };
   }
@@ -231,12 +307,15 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   const lookingAt = candidates.find((t) => t.active && t.windowId === focusedWindowId)?.id;
   const pages = onePerPage(decisionOrder(candidates, { activeTabIds: candidates.filter((t) => t.active).map((t) => t.id), focusedWindowId }));
 
-  // The WebAssembly engine is slow, so it works through tabs a few at a time.
+  // A run decides only so many tabs, then groups them and leaves the rest to the next run, so a
+  // large tab set never holds up grouping (or the runs queued behind this one). The WebAssembly
+  // engine is slow, so it works through tabs a few at a time.
   let device = status.device;
   let used = 0;
   let more = false;
+  let clock = 0; // started after the first answer, which may have waited for the model to load
   const room = () => {
-    if (device === 'wasm' && used >= SLOW_BUDGET) more = true;
+    if (used >= (device === 'wasm' ? SLOW_BUDGET : FAST_BUDGET) || (clock && Date.now() - clock > TIME_BUDGET)) more = true;
     return !more;
   };
   let folders = null;
@@ -247,6 +326,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
     const key = keyOf(t);
     const before = st.pageMap[key];
     const r = await decide(st, settings, t, () => (folders ||= bookmarkFolders().catch(() => [])));
+    clock ||= Date.now();
     if (!device) device = (await deciderStatus(settings))?.device; // the engine picks its device when it loads
     const cur = st.pageMap[key];
     if (!r || cur?.fixed || (cur && cur !== before && (cur.at || 0) > (before?.at || 0))) return;
@@ -278,8 +358,11 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
     const m = st.pageMap[keyOf(t)];
     return m?.catId === OTHER_ID && !m.fixed;
   });
-  if (settings.autoDiscover && inOther().length >= 3 && (rediscover || now - st.lastDiscovery > DISCOVER_EVERY) && room()) {
-    const added = await discover(st, settings, pages, inOther());
+  // Names the popup's Re-discover got from the built-in model go through the same check.
+  const proposed = Array.isArray(categories) ? categories : [];
+  const due = settings.autoDiscover && inOther().length >= 3 && (rediscover || now - st.lastDiscovery > DISCOVER_EVERY);
+  if ((proposed.length || due) && room()) {
+    const added = await discover(st, settings, pages, inOther(), proposed);
     // pages decided earlier in this run, even within the same millisecond, were decided without these folders
     const latest = Math.max(0, ...Object.values(st.pageMap).map((m) => m.at || 0));
     for (const c of added) c.createdAt = Math.max(c.createdAt || 0, latest + 1);
@@ -373,12 +456,13 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
     }
   }
 
-  // --- 8. tidy: decisions for closed pages (hand-placed ones are kept), and stale categories
+  // --- 8. tidy: decisions for closed pages (pages placed by hand are kept; a site rule's entries are
+  // rebuilt from the rule), and stale folders TabSage made itself
   const open = new Set(all.map(keyOf));
-  for (const [k, m] of Object.entries(st.pageMap)) if (!m.fixed && !open.has(k)) delete st.pageMap[k];
+  for (const [k, m] of Object.entries(st.pageMap)) if ((!m.fixed || m.source === 'site') && !open.has(k)) delete st.pageMap[k];
   const mapped = new Set([st.siteRules, st.pageMap].flatMap((m) => Object.values(m).map((x) => x.catId)));
   for (const c of realCats(st)) {
-    if (!c.pinned && !mapped.has(c.id) && now - c.createdAt > 14 * 864e5) delete st.categories[c.id];
+    if (!c.pinned && !mapped.has(c.id) && !ownedByUser(st, c) && now - c.createdAt > 14 * 864e5) delete st.categories[c.id];
   }
 
   st.stats = { organizedAt: now, lastEngine, reason };
@@ -541,11 +625,15 @@ export async function catForGroup(groupId) {
 export async function learnFromUser(tab, groupId) {
   // a move you make is final: any question about an earlier move is withdrawn first
   await withdrawWhy(tab.id);
+  // nothing about an incognito page is written down
+  if (tab.incognito) return;
+  await loadManualTabs();
   if (groupId === -1) {
     manualTabs.add(tab.id);
+    await saveManualTabs();
     return;
   }
-  manualTabs.delete(tab.id);
+  if (manualTabs.delete(tab.id)) await saveManualTabs();
   const url = realUrl(tab);
   const d = hostOf(url);
   const catId = await catForGroup(groupId);
@@ -564,22 +652,30 @@ const WHY_MS = 10 * 60 * 1000; // an answer that comes later than this is not ta
 // worker may restart while the user types an answer.
 const whyAsked = new Map();
 
-// Show the "Why?" card in the tab, injected only now. The answers stay here; the card only learns
-// their labels and sends back the id of the one chosen.
+// Show the "Why?" card in the tab, injected only now. The page itself is told only to make room for
+// the card: the card is an extension page in a frame, which asks for its question here (whyQuestion)
+// and sends back the id of the answer chosen, so neither the question nor the answer passes through
+// the page.
 async function askWhy(tab, cat, profile, host) {
   if (!cat || cat.id === DAILY_ID) return;
   const options = whyOptions(cat, profile, host);
-  const ask = { url: pageKey(realUrl(tab)), catId: cat.id, options, at: Date.now() };
+  const question = `Why does this belong in ${groupTitle(cat, profile)}?`;
+  const ask = { url: pageKey(realUrl(tab)), catId: cat.id, question, options, at: Date.now() };
   whyAsked.set(tab.id, ask);
   await chrome.storage.session?.set({ [`why${tab.id}`]: ask }).catch(() => {});
   try {
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['why.js'] });
-    await chrome.tabs.sendMessage(tab.id, {
-      target: 'why',
-      question: `Why does this belong in ${groupTitle(cat, profile)}?`,
-      options: options.map(({ id, label }) => ({ id, label })),
-    });
+    await chrome.tabs.sendMessage(tab.id, { target: 'why', show: true });
   } catch {} // pages the extension may not script (the Web Store, chrome:// pages)
+}
+
+/** The question the card in `tab` should show, with only the labels of its answers; null when none stands. */
+export async function whyQuestion(tab) {
+  if (!tab) return null;
+  const k = `why${tab.id}`;
+  const ask = whyAsked.get(tab.id) || (await chrome.storage.session?.get(k).catch(() => null))?.[k];
+  if (!ask || Date.now() - ask.at >= WHY_MS || pageKey(realUrl(tab)) !== ask.url) return null;
+  return { question: ask.question, options: ask.options.map(({ id, label }) => ({ id, label })) };
 }
 
 // Forget the question a tab was asked, and take its card off the page.

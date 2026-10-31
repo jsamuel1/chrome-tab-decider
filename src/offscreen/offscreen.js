@@ -5,7 +5,8 @@ import { Decider } from '../engine/decider.js';
 import { resolveModel } from '../engine/models.js';
 import { selfTest } from '../engine/selftest.js';
 import { discoverCategories, llmAvailability, llmAssign } from '../engine/llm.js';
-import { createActivity } from './activity.js';
+import { createActivity, handle } from './activity.js';
+import { mayUseEngine } from '../lib/senders.js';
 
 let decider = null;
 let deciderKey = '';
@@ -117,12 +118,13 @@ const handlers = {
   },
 };
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.target !== 'offscreen') return false;
-  const h = handlers[msg.type];
-  if (!h) return false;
+  // content scripts in web pages reach every extension context: the engine answers only our own
+  const h = Object.hasOwn(handlers, msg.type) && handlers[msg.type];
+  if (!h || !mayUseEngine(sender)) return false;
   Promise.resolve()
-    .then(() => (msg.type === 'engine.idle' ? h(msg) : activity.run(() => h(msg))))
+    .then(() => handle(activity, msg.type, () => h(msg)))
     .then((r) => sendResponse({ ok: true, result: r }))
     .catch((e) => {
       console.error('[TabSage offscreen]', msg.type, e);
