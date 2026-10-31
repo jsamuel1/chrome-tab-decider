@@ -43,9 +43,17 @@ const opts = {
   logLevel: 'info',
 };
 
+// Content scripts cannot be ES modules, so they are bundled as classic scripts (IIFE).
+const contentOpts = {
+  ...opts,
+  entryPoints: { content: 'src/content/details.js' },
+  format: 'iife',
+};
+
 if (watch) {
-  const ctx = await esbuild.context(opts);
-  await ctx.watch();
+  await (await esbuild.context(opts)).watch();
+  await (await esbuild.context(contentOpts)).watch();
 } else {
   await esbuild.build(opts);
+  await esbuild.build(contentOpts);
 }

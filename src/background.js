@@ -7,7 +7,7 @@ import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
 import { runArchive, search, reopenArchived, deleteArchived } from './lib/archive.js';
 import { ai, closeOffscreen, ensureOffscreen, unloadIfIdle } from './lib/ai.js';
 import { modelError } from './engine/models.js';
-import { realUrl } from './lib/urls.js';
+import { realUrl, pageKey } from './lib/urls.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
 
 // ---------- debouncers
@@ -33,10 +33,18 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   const { settings } = await chrome.storage.local.get('settings');
   if (!settings) await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
   setupAlarms();
+  injectContentScripts();
   if (reason === 'install') chrome.runtime.openOptionsPage();
   organize({ reason: 'installed' }).then(() => scheduleSnapshot(500));
   prefetchModel('install');
 });
+
+/** Content scripts only reach tabs opened after install, so inject into the ones already open. */
+async function injectContentScripts() {
+  const tabs = await chrome.tabs.query({});
+  await Promise.all(tabs.map((t) =>
+    chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['content.js'] }).catch(() => {})));
+}
 
 /** Download the classifier into the browser cache (no GPU session until it is needed). */
 async function prefetchModel(why) {
@@ -56,6 +64,7 @@ async function prefetchModel(why) {
 chrome.runtime.onStartup.addListener(async () => {
   startingUp = true;
   setupAlarms();
+  injectContentScripts();
   try {
     const { restored } = await restore();
     console.info(`[TabSage] restored ${restored} lazy tabs`);
@@ -219,6 +228,14 @@ const api = {
       st.reasons = st.reasons.filter((r) => !(r.scope === 'site' && r.host === domain));
     }, { immediate: true });
     await organize({ reason: 'forget-domain' });
+  },
+  async pageDetails({ url, details }) {
+    if (!url || !details) return;
+    const key = pageKey(url);
+    await updateState((st) => {
+      const now = Date.now();
+      st.tabMeta[key] = { ...(st.tabMeta[key] || { firstSeen: now, lastAccessed: now }), details };
+    });
   },
   getSettings: () => getSettings(),
   async setSettings({ patch }) {

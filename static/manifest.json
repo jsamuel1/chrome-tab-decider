@@ -12,12 +12,22 @@
     "unlimitedStorage",
     "offscreen",
     "alarms",
-    "favicon"
+    "favicon",
+    "scripting",
+    "bookmarks"
   ],
   "host_permissions": [
     "https://huggingface.co/*",
     "https://*.huggingface.co/*",
-    "https://*.hf.co/*"
+    "https://*.hf.co/*",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
   ],
   "background": {
     "service_worker": "background.js",
