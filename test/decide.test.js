@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.chrome = { runtime: { getURL: (p) => `chrome-extension://x/${p}` } };
-const { pageText, decisionOrder, shortlist, decisionState, shouldMove } = await import('../src/lib/decide.js');
+const { pageText, decisionOrder, shortlist, decisionState, shouldMove, folderOption } = await import('../src/lib/decide.js');
 
 test('pageText with no details uses the tab title and address', () => {
   const text = pageText({ title: 'Quarterly plan', url: 'https://docs.example.com/d/1#heading' }, undefined);
@@ -78,4 +78,24 @@ test('shouldMove: never for a fixed page, not within the margin, yes above it', 
   assert.equal(shouldMove(null, next, { cats }), true);
   assert.equal(shouldMove({ catId: 'gone', confidence: 0.99 }, next, { cats }), true);
   assert.equal(shouldMove({ catId: 'a', confidence: 0.5 }, next, { margin: 0.5, cats }), false);
+});
+
+test('the company folder is always offered, even when other folders match the page better', () => {
+  const cats = [{ id: 'co', name: 'Amazon', kind: 'company' }];
+  for (let i = 0; i < 12; i++) cats.push({ id: `f${i}`, name: `phonetool joshua folder${i}`, kind: 'personal' });
+  const list = shortlist('Phonetool - Joshua Samuel\nphonetool.example.org', cats, [], 8);
+  assert.ok(list.some((c) => c.id === 'co'));
+  assert.ok(list.length <= 9);
+});
+
+test('company and project folders tell the classifier what they hold', () => {
+  const profile = { company: 'Amazon', companyDomains: ['amazon.com', 'amazon.dev'] };
+  const co = folderOption({ name: 'Amazon', kind: 'company', description: '' }, profile);
+  assert.equal(co.name, 'Amazon');
+  assert.match(co.description, /amazon\.com/);
+  assert.match(co.description, /amazon\.dev/);
+  assert.match(co.description, /work/i);
+  const proj = folderOption({ name: 'Acme', kind: 'work', description: '' }, profile);
+  assert.match(proj.description, /Amazon/);
+  assert.deepEqual(folderOption({ name: 'Travel', kind: 'personal', description: 'trips' }, profile), { name: 'Travel', description: 'trips' });
 });

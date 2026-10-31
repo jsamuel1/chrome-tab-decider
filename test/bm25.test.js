@@ -150,3 +150,10 @@ test('candidateTerms does not join Chinese words that touch with no space', () =
   assert.ok(terms.length > 0);
   assert.ok(!terms.some((t) => t.includes(' ')));
 });
+
+test('addresses split into their names, so "amazon" matches phonetool.amazon.com', () => {
+  const t = tokenize('Phonetool\nphonetool.amazon.com');
+  assert.ok(t.includes('amazon'));
+  assert.ok(t.includes('phonetool'));
+  assert.ok(tokenize('code.amazon.dev').includes('amazon'));
+});

@@ -27,14 +27,34 @@ export function decisionOrder(tabs, { activeTabIds = [], focusedWindowId = null 
   return tabs.slice().sort((a, b) => rank(a) - rank(b) || b.id - a.id);
 }
 
-/** The k folders whose name, description and reasons best match the page (BM25). */
+/**
+ * The k folders whose name, description and reasons best match the page (BM25), plus the company
+ * folder: work pages rarely mention the company by name, so the classifier must always be able to choose it.
+ */
 export function shortlist(page, cats, reasons, k = 8) {
   const docs = cats.map((c) => ({
     id: c.id,
     text: [c.name, c.description, ...(reasons || []).filter((r) => r.catId === c.id).map((r) => r.text)].join(' '),
   }));
   const byId = new Map(cats.map((c) => [c.id, c]));
-  return score(index(docs), page).slice(0, k).map((s) => byId.get(s.id));
+  const list = score(index(docs), page).slice(0, k).map((s) => byId.get(s.id));
+  const company = cats.find((c) => c.kind === 'company');
+  if (company && !list.includes(company)) list.push(company);
+  return list;
+}
+
+/** What the classifier is told about a folder. Company and project folders are described from the profile. */
+export function folderOption(cat, profile) {
+  const company = String(profile?.company || '').trim();
+  const domains = (profile?.companyDomains || []).filter(Boolean);
+  if (cat.kind === 'company' && company) {
+    const where = domains.length ? `, such as pages on ${domains.join(', ')}` : '';
+    return { name: cat.name, description: `work for ${company}${where}, that is not one of the projects` };
+  }
+  if (cat.kind === 'work' && company) {
+    return { name: cat.name, description: cat.description || `a ${company} work project or customer` };
+  }
+  return { name: cat.name, description: cat.description || '' };
 }
 
 /**

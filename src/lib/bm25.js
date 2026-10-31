@@ -16,14 +16,15 @@ function runs(text, lang) {
       else brk();
       continue;
     }
-    const t = segment.toLowerCase();
-    if (/^\d+$/.test(t) || ([...t].length === 1 && !SINGLE_OK.test(t))) {
+    // An address such as phonetool.amazon.com is one segment; its names are what match a folder.
+    const parts = segment.toLowerCase().split('.').filter((t) => !/^\d*$/.test(t) && ([...t].length > 1 || SINGLE_OK.test(t)));
+    if (!parts.length) {
       brk();
       continue;
     }
     if (!spaced) brk();
     spaced = false;
-    out.at(-1).push(t);
+    out.at(-1).push(...parts);
   }
   return out.filter((r) => r.length);
 }

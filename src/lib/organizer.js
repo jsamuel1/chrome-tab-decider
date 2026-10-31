@@ -8,7 +8,7 @@ import { candidateTerms, displayName } from './bm25.js';
 import { profileText } from './profile.js';
 import { bookmarkFolders, bookmarkHint } from './bookmarks.js';
 import { groupTitle, isRename, nameFromTitle, planGroups } from './grouping.js';
-import { decisionOrder, decisionState, pageText, shortlist, shouldMove } from './decide.js';
+import { decisionOrder, decisionState, folderOption, pageText, shortlist, shouldMove } from './decide.js';
 import { sortAll } from './sorter.js';
 import { applyReason, whyOptions } from './reasons.js';
 import { carryUse, planPins, startCooldown } from './usage.js';
@@ -124,6 +124,10 @@ function onePerPage(tabs) {
   });
 }
 
+// Raise when what the classifier is asked changes, so pages decided the old way are decided again at a quiet moment.
+// 2: addresses split into names, the company folder always offered, company and project folders described.
+export const DECISION_VERSION = 2;
+
 /** Ask the classifier which folder one page belongs in; null when it could not answer. */
 async function decide(st, settings, tab, folders) {
   const key = keyOf(tab);
@@ -131,9 +135,10 @@ async function decide(st, settings, tab, folders) {
   const page = pageText(tab, details);
   const at = Date.now();
   const sig = detailsSig(details);
+  const v = DECISION_VERSION;
   const other = st.categories[OTHER_ID];
   const list = shortlist(page, realCats(st), st.reasons);
-  if (!list.length) return { catId: OTHER_ID, confidence: 0, source: 'decider', at, sig };
+  if (!list.length) return { catId: OTHER_ID, confidence: 0, source: 'decider', at, sig, v };
 
   const host = hostOf(realUrl(tab));
   const inList = new Set(list.map((c) => c.id));
@@ -146,12 +151,12 @@ async function decide(st, settings, tab, folders) {
     const r = await ai('decider.choice', {
       settings, state,
       instructions: 'Which folder should this browser tab go in?',
-      options: options.map((c) => ({ name: c.name, description: c.description })),
+      options: options.map((c) => folderOption(c, st.profile)),
     }, LONG);
     if (r.error) return null;
     lastEngine = 'decider';
     const cat = options[r.labels.indexOf(r.choice)] || other;
-    return { catId: r.confidence < settings.minConfidence ? OTHER_ID : cat.id, confidence: r.confidence, source: 'decider', at, sig };
+    return { catId: r.confidence < settings.minConfidence ? OTHER_ID : cat.id, confidence: r.confidence, source: 'decider', at, sig, v };
   } catch (e) {
     console.warn('[TabSage] decider failed', e);
     return null;
@@ -372,7 +377,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   const changedAt = Math.max(0, st.profile.updatedAt || 0, ...realCats(st).map((c) => c.createdAt || 0), ...st.reasons.map((r) => r.at || 0));
   const stale = pages.filter((t) => {
     const m = st.pageMap[keyOf(t)];
-    return m && !m.fixed && m.at < changedAt && t.id !== lookingAt;
+    return m && !m.fixed && (m.at < changedAt || (m.v || 1) < DECISION_VERSION) && t.id !== lookingAt;
   });
   const busySince = stale.length ? await activityAt() : 0;
   if (stale.length && Date.now() - busySince < QUIET_MS) {
@@ -380,7 +385,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   } else {
     for (const t of stale) {
       if (!room()) break;
-      await ask(t, (cur, next) => (shouldMove(cur, next, { cats: st.categories }) ? next : { ...cur, at: next.at }));
+      await ask(t, (cur, next) => (shouldMove(cur, next, { cats: st.categories }) ? next : { ...cur, at: next.at, v: next.v }));
     }
   }
   if (more) chrome.alarms.create('organize-more', { delayInMinutes: 0.5 });
