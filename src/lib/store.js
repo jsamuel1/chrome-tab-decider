@@ -58,6 +58,18 @@ export async function setSettings(patch) {
   return next;
 }
 
+export const SCHEMA_VERSION = 2;
+
+/** Record that the user put every page on `host` in `catId`. A changed decision gets a new reason. */
+export function setSiteRule(st, host, catId, at = Date.now()) {
+  const cur = st.siteRules[host];
+  if (cur && cur.catId === catId) return cur;
+  const reason = { id: uid('r'), catId, text: 'Moved here by hand', scope: 'site', host, url: '', at };
+  st.reasons.push(reason);
+  st.siteRules[host] = { catId, reasonId: reason.id };
+  return st.siteRules[host];
+}
+
 /** Bring state saved by an older version up to the current shape. Safe to run repeatedly. */
 export function migrate(st) {
   const fresh = structuredClone(DEFAULT_STATE);
@@ -69,14 +81,16 @@ export function migrate(st) {
     if (c.parentId === undefined) c.parentId = null;
     if (c.isNew === undefined) c.isNew = false;
   }
-  if (st.domainMap) {
-    for (const [host, m] of Object.entries(st.domainMap)) {
-      if (m.source !== 'user' || st.siteRules[host]) continue;
-      const reason = { id: uid('r'), catId: m.catId, text: 'Moved here by hand', scope: 'site', host, url: '', at: m.at || Date.now() };
-      st.reasons.push(reason);
-      st.siteRules[host] = { catId: m.catId, reasonId: reason.id };
+  // Only state from before the page-based model has a domainMap to carry over. The interim organizer
+  // keeps a fresh domainMap of its own afterwards, which must survive service-worker restarts.
+  if ((st.schemaVersion || 1) < SCHEMA_VERSION) {
+    if (st.domainMap) {
+      for (const [host, m] of Object.entries(st.domainMap)) {
+        if (m.source === 'user') setSiteRule(st, host, m.catId, m.at || Date.now());
+      }
+      delete st.domainMap;
     }
-    delete st.domainMap;
+    st.schemaVersion = SCHEMA_VERSION;
   }
   return st;
 }

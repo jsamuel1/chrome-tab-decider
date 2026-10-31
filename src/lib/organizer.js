@@ -1,6 +1,6 @@
 // The organizer: domain clusters → categories → Chrome tab groups.
 
-import { getSettings, getState, updateState } from './store.js';
+import { getSettings, getState, setSiteRule, updateState } from './store.js';
 import { hostOf, isGroupable, realTitle, realUrl } from './urls.js';
 import { OTHER_ID, ensureOther, findByName, mergeCategories, seedList } from './categories.js';
 import { ai, classifierReady } from './ai.js';
@@ -112,6 +112,12 @@ async function _organize({ rediscover = false, categories = null, reassign = nul
   if (!(await classifierReady(settings))) return { skipped: 'model-not-ready' };
   const st = await getState();
   st.domainMap ||= {}; // until the organizer is rewritten around pageMap, it still keeps its per-host decisions here
+  // Hand-made corrections live in siteRules; they win over anything the classifier decided for that host.
+  for (const [h, r] of Object.entries(st.siteRules)) {
+    if (!st.categories[r.catId]) continue;
+    const m = st.domainMap[h];
+    if (!m || m.source !== 'user' || m.catId !== r.catId) st.domainMap[h] = { catId: r.catId, confidence: 1, source: 'user', at: 0 };
+  }
   ensureOther(st, settings);
   await adoptUserGroups(st, settings);
 
@@ -232,7 +238,7 @@ async function _organize({ rediscover = false, categories = null, reassign = nul
   }
 
   // --- 6. tidy stale categories (no tabs, no mappings, not pinned, > 14 days)
-  const mapped = new Set(Object.values(st.domainMap).map((m) => m.catId));
+  const mapped = new Set([st.domainMap, st.siteRules, st.pageMap].flatMap((m) => Object.values(m || {}).map((x) => x.catId)));
   for (const c of realCats()) {
     if (!c.pinned && !mapped.has(c.id) && now - c.createdAt > 14 * 864e5) delete st.categories[c.id];
   }
@@ -269,6 +275,7 @@ export async function learnFromUser(tab, groupId) {
   const catId = await catForGroup(groupId);
   if (!catId || !d) return;
   await updateState((st) => {
+    setSiteRule(st, d, catId);
     st.domainMap ||= {};
     st.domainMap[d] = { catId, confidence: 1, source: 'user', at: Date.now() };
   });

@@ -172,7 +172,7 @@ const api = {
       const gids = [];
       for (const g of groups) if ((await catForGroup(g.id)) === c.id) gids.push(g.id);
       const n = tabs.filter((t) => gids.includes(t.groupId)).length;
-      const domains = Object.entries(st.domainMap || {}).filter(([, m]) => m.catId === c.id).map(([d]) => d);
+      const domains = [...new Set([st.siteRules, st.domainMap || {}].flatMap((map) => Object.entries(map).filter(([, m]) => m.catId === c.id).map(([d]) => d)))];
       cats.push({ ...c, tabCount: n, groupIds: gids, domains });
     }
     cats.sort((a, b) => (b.pinned - a.pinned) || (b.tabCount - a.tabCount));
@@ -203,6 +203,8 @@ const api = {
     await updateState((st) => {
       delete st.categories[catId];
       for (const [d, m] of Object.entries(st.domainMap || {})) if (m.catId === catId) delete st.domainMap[d];
+      for (const [h, r] of Object.entries(st.siteRules)) if (r.catId === catId) delete st.siteRules[h];
+      st.reasons = st.reasons.filter((r) => r.catId !== catId);
     }, { immediate: true });
     await organize({ reason: 'delete-category' });
   },
@@ -211,7 +213,11 @@ const api = {
     await organize({ reason: 'add-category', reassign: 'heuristic' });
   },
   async forgetDomain({ domain }) {
-    await updateState((st) => { delete st.domainMap?.[domain]; }, { immediate: true });
+    await updateState((st) => {
+      delete st.domainMap?.[domain];
+      delete st.siteRules[domain];
+      st.reasons = st.reasons.filter((r) => !(r.scope === 'site' && r.host === domain));
+    }, { immediate: true });
     await organize({ reason: 'forget-domain' });
   },
   getSettings: () => getSettings(),

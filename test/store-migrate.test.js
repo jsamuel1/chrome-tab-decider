@@ -46,3 +46,26 @@ test('migrate is idempotent', () => {
   const snapshot = structuredClone(once);
   assert.deepEqual(migrate(once), snapshot);
 });
+
+test('a newer hand-made correction replaces an older site rule for the same host', () => {
+  // State saved by the first page-based build: a rule already exists, and a later correction sits in domainMap.
+  const st = migrate({
+    categories: { c1: { id: 'c1', name: 'Work' }, c2: { id: 'c2', name: 'Fun' } },
+    siteRules: { 'a.com': { catId: 'c1', reasonId: 'r1' } },
+    reasons: [{ id: 'r1', catId: 'c1', text: 'Moved here by hand', scope: 'site', host: 'a.com', url: '', at: 1 }],
+    domainMap: { 'a.com': { catId: 'c2', source: 'user', at: 2 } },
+  });
+  assert.equal(st.siteRules['a.com'].catId, 'c2');
+  const reason = st.reasons.find((r) => r.id === st.siteRules['a.com'].reasonId);
+  assert.equal(reason.catId, 'c2');
+  assert.equal(reason.host, 'a.com');
+  assert.equal('domainMap' in st, false);
+});
+
+test('once migrated, the organizer\'s own domainMap survives a reload', () => {
+  const once = migrate(old());
+  once.domainMap = { 'x.com': { catId: 'c2', source: 'decider', at: 5 } };
+  const reloaded = migrate(structuredClone(once));
+  assert.deepEqual(reloaded.domainMap, once.domainMap);
+  assert.deepEqual(reloaded.siteRules, once.siteRules);
+});
