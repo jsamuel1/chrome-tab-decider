@@ -3,7 +3,6 @@
 export const DEFAULT_SETTINGS = {
   enabled: true,
   // Grouping
-  domainKey: 'hostname',        // 'hostname' (mail.google.com) | 'registrable' (google.com)
   maxGroups: 8,                 // top categories that get their own group; the rest go to "Other"
   otherGroupName: 'Other',
   minConfidence: 0.35,          // decider confidence below this → Other
@@ -32,8 +31,14 @@ export const DEFAULT_SETTINGS = {
 };
 
 const DEFAULT_STATE = {
-  categories: {},   // id -> { id, name, description, color, pinned, lastActive, createdAt, source }
-  domainMap: {},    // domainKey -> { catId, confidence, source: 'decider'|'llm'|'heuristic'|'user', at }
+  categories: {},   // id -> { id, name, description, color, pinned, lastActive, createdAt, source, kind, parentId, isNew }
+  pageMap: {},      // pageKey -> { catId, confidence, source: 'decider'|'user', at, fixed }
+  siteRules: {},    // host -> { catId, reasonId }
+  reasons: [],      // [{ id, catId, text, scope: 'page'|'site', host, url, at }]
+  usage: {},        // pageKey -> { score, at }
+  ourPins: {},      // pageKey -> time we pinned it
+  pinCooldown: {},  // pageKey -> time before which we do not pin it again
+  profile: { company: '', companyDomains: [], work: '', projects: [], style: 'specific-work', categories: [], onboarded: false },
   tabMeta: {},      // realUrl -> { firstSeen, lastAccessed }
   snapshot: null,   // last persisted window/group/tab layout
   archive: [],      // [{ id, url, title, favIconUrl, domain, catName, archivedAt, lastAccessed }]
@@ -53,13 +58,36 @@ export async function setSettings(patch) {
   return next;
 }
 
+/** Bring state saved by an older version up to the current shape. Safe to run repeatedly. */
+export function migrate(st) {
+  const fresh = structuredClone(DEFAULT_STATE);
+  for (const k of ['pageMap', 'siteRules', 'reasons', 'usage', 'ourPins', 'pinCooldown', 'profile']) {
+    if (st[k] === undefined) st[k] = fresh[k];
+  }
+  for (const c of Object.values(st.categories || {})) {
+    if (c.kind === undefined) c.kind = 'personal';
+    if (c.parentId === undefined) c.parentId = null;
+    if (c.isNew === undefined) c.isNew = false;
+  }
+  if (st.domainMap) {
+    for (const [host, m] of Object.entries(st.domainMap)) {
+      if (m.source !== 'user' || st.siteRules[host]) continue;
+      const reason = { id: uid('r'), catId: m.catId, text: 'Moved here by hand', scope: 'site', host, url: '', at: m.at || Date.now() };
+      st.reasons.push(reason);
+      st.siteRules[host] = { catId: m.catId, reasonId: reason.id };
+    }
+    delete st.domainMap;
+  }
+  return st;
+}
+
 let cached = null;
 let writeTimer = null;
 
 export async function getState() {
   if (cached) return cached;
   const { state } = await chrome.storage.local.get('state');
-  cached = { ...structuredClone(DEFAULT_STATE), ...(state || {}) };
+  cached = migrate({ ...structuredClone(DEFAULT_STATE), ...(state || {}) });
   return cached;
 }
 

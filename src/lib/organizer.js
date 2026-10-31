@@ -1,7 +1,7 @@
 // The organizer: domain clusters → categories → Chrome tab groups.
 
 import { getSettings, getState, updateState } from './store.js';
-import { domainKey, isGroupable, realTitle, realUrl } from './urls.js';
+import { hostOf, isGroupable, realTitle, realUrl } from './urls.js';
 import { OTHER_ID, ensureOther, findByName, mergeCategories, seedList } from './categories.js';
 import { ai, classifierReady } from './ai.js';
 import { sortAll } from './sorter.js';
@@ -28,7 +28,7 @@ function clusterTabs(tabs, settings) {
   const clusters = new Map();
   for (const t of tabs) {
     const url = realUrl(t);
-    const d = domainKey(url, settings.domainKey);
+    const d = hostOf(url);
     if (!d) continue;
     if (!clusters.has(d)) clusters.set(d, { domain: d, tabs: [] });
     clusters.get(d).tabs.push(t);
@@ -42,7 +42,7 @@ function clusterState(c) {
 }
 
 async function discover(st, settings, tabs, mode) {
-  const items = tabs.map((t) => ({ domain: domainKey(realUrl(t), settings.domainKey), title: realTitle(t) }));
+  const items = tabs.map((t) => ({ domain: hostOf(realUrl(t)), title: realTitle(t) }));
   const existing = Object.values(st.categories).filter((c) => c.id !== OTHER_ID).map((c) => ({ name: c.name, description: c.description }));
   let found = null;
   let engine = 'none';
@@ -111,6 +111,7 @@ async function _organize({ rediscover = false, categories = null, reassign = nul
   if (!settings.enabled) return;
   if (!(await classifierReady(settings))) return { skipped: 'model-not-ready' };
   const st = await getState();
+  st.domainMap ||= {}; // until the organizer is rewritten around pageMap, it still keeps its per-host decisions here
   ensureOther(st, settings);
   await adoptUserGroups(st, settings);
 
@@ -259,7 +260,7 @@ export async function catForGroup(groupId) {
 /** The user moved a tab into one of our groups: remember that for its whole domain. */
 export async function learnFromUser(tab, groupId) {
   const settings = await getSettings();
-  const d = domainKey(realUrl(tab), settings.domainKey);
+  const d = hostOf(realUrl(tab));
   if (groupId === -1) {
     manualTabs.add(tab.id);
     return;
@@ -268,6 +269,7 @@ export async function learnFromUser(tab, groupId) {
   const catId = await catForGroup(groupId);
   if (!catId || !d) return;
   await updateState((st) => {
+    st.domainMap ||= {};
     st.domainMap[d] = { catId, confidence: 1, source: 'user', at: Date.now() };
   });
   organize({ reason: 'user-move' });

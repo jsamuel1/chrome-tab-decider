@@ -7,7 +7,7 @@ import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
 import { runArchive, search, reopenArchived, deleteArchived } from './lib/archive.js';
 import { ai, closeOffscreen, ensureOffscreen, unloadIfIdle } from './lib/ai.js';
 import { modelError } from './engine/models.js';
-import { realUrl, domainKey } from './lib/urls.js';
+import { realUrl } from './lib/urls.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
 
 // ---------- debouncers
@@ -172,7 +172,7 @@ const api = {
       const gids = [];
       for (const g of groups) if ((await catForGroup(g.id)) === c.id) gids.push(g.id);
       const n = tabs.filter((t) => gids.includes(t.groupId)).length;
-      const domains = Object.entries(st.domainMap).filter(([, m]) => m.catId === c.id).map(([d]) => d);
+      const domains = Object.entries(st.domainMap || {}).filter(([, m]) => m.catId === c.id).map(([d]) => d);
       cats.push({ ...c, tabCount: n, groupIds: gids, domains });
     }
     cats.sort((a, b) => (b.pinned - a.pinned) || (b.tabCount - a.tabCount));
@@ -202,7 +202,7 @@ const api = {
     if (catId === OTHER_ID) return;
     await updateState((st) => {
       delete st.categories[catId];
-      for (const [d, m] of Object.entries(st.domainMap)) if (m.catId === catId) delete st.domainMap[d];
+      for (const [d, m] of Object.entries(st.domainMap || {})) if (m.catId === catId) delete st.domainMap[d];
     }, { immediate: true });
     await organize({ reason: 'delete-category' });
   },
@@ -211,13 +211,13 @@ const api = {
     await organize({ reason: 'add-category', reassign: 'heuristic' });
   },
   async forgetDomain({ domain }) {
-    await updateState((st) => { delete st.domainMap[domain]; }, { immediate: true });
+    await updateState((st) => { delete st.domainMap?.[domain]; }, { immediate: true });
     await organize({ reason: 'forget-domain' });
   },
   getSettings: () => getSettings(),
   async setSettings({ patch }) {
     const s = await setSettings(patch);
-    if ('maxGroups' in patch || 'domainKey' in patch || 'otherGroupName' in patch) organize({ reason: 'settings' });
+    if ('maxGroups' in patch || 'otherGroupName' in patch) organize({ reason: 'settings' });
     if ('groupSort' in patch || 'tabSort' in patch) sortAll();
     if ('model' in patch || 'customModel' in patch || patch.autoDownload) prefetchModel('settings');
     return s;

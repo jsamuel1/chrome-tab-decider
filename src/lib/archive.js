@@ -1,7 +1,7 @@
 // Trim ad-hoc tabs that haven't been revisited in N days: close them but keep them searchable.
 
 import { getSettings, getState, updateState, uid } from './store.js';
-import { domainKey, isGroupable, lazyUrl, realTitle, realUrl } from './urls.js';
+import { hostOf, isGroupable, lazyUrl, realTitle, realUrl } from './urls.js';
 import { catForGroup, organize } from './organizer.js';
 import { OTHER_ID } from './categories.js';
 
@@ -31,7 +31,7 @@ export async function runArchive({ dryRun = false } = {}) {
       if (existing.has(url)) s.archive = s.archive.filter((a) => a.url !== url);
       s.archive.unshift({
         id: uid('a'), url, title: realTitle(t), favIconUrl: t.favIconUrl || '',
-        domain: domainKey(url, settings.domainKey), catName: cat?.name || '',
+        domain: hostOf(url), catName: cat?.name || '',
         archivedAt: Date.now(), lastAccessed: last,
       });
       delete s.tabMeta[url];

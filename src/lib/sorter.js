@@ -1,7 +1,7 @@
 // Dynamic ordering: pinned groups first, then groups by the chosen mode; tabs within groups likewise.
 
 import { getSettings, getState } from './store.js';
-import { domainKey, realTitle, realUrl } from './urls.js';
+import { hostOf, realTitle, realUrl } from './urls.js';
 import { catForGroup } from './organizer.js';
 import { classifierReady } from './ai.js';
 
@@ -15,7 +15,7 @@ function orderTabs(tabs, mode, st, settings) {
   // domain-mru: domains ordered by their most recent tab, tabs MRU inside each domain
   const byDomain = new Map();
   for (const t of arr) {
-    const d = domainKey(realUrl(t), settings.domainKey);
+    const d = hostOf(realUrl(t));
     if (!byDomain.has(d)) byDomain.set(d, []);
     byDomain.get(d).push(t);
   }

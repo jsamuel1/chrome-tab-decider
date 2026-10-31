@@ -1,17 +1,4 @@
-// URL helpers: real URL behind lazy placeholders, domain keys.
-
-// Common multi-part public suffixes (enough for grouping; not a full PSL).
-const MULTI_SUFFIX = new Set([
-  'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'ltd.uk', 'me.uk',
-  'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'asn.au', 'id.au',
-  'co.nz', 'org.nz', 'govt.nz', 'ac.nz',
-  'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp',
-  'com.br', 'com.cn', 'com.hk', 'com.sg', 'com.mx', 'com.ar', 'com.tr', 'com.tw',
-  'co.in', 'co.kr', 'co.za', 'co.il', 'co.id', 'com.my', 'com.ph', 'com.vn',
-  'github.io', 'gitlab.io', 'vercel.app', 'netlify.app', 'pages.dev', 'web.app',
-  'firebaseapp.com', 'herokuapp.com', 'azurewebsites.net', 'cloudfront.net',
-  'amazonaws.com', 'blogspot.com', 'substack.com', 'medium.com', 'notion.site',
-]);
+// URL helpers: real URL behind lazy placeholders, page keys.
 
 export const LAZY_PATH = '/lazy.html';
 
@@ -62,17 +49,11 @@ export function hostOf(url) {
   }
 }
 
-export function registrable(host) {
-  if (!host || /^\d+\.\d+\.\d+\.\d+$/.test(host) || !host.includes('.')) return host;
-  const parts = host.split('.');
-  const last2 = parts.slice(-2).join('.');
-  if (MULTI_SUFFIX.has(last2) && parts.length >= 3) return parts.slice(-3).join('.');
-  return last2;
-}
-
-export function domainKey(url, mode = 'hostname') {
-  const h = hostOf(url);
-  return mode === 'registrable' ? registrable(h) : h;
+/** What we remember a decision against: the real URL without its #fragment (single-page apps change it freely). */
+export function pageKey(url) {
+  const real = realUrl(url || '');
+  const i = real.indexOf('#');
+  return i === -1 ? real : real.slice(0, i);
 }
 
 /** Human-ish site name: "docs.google.com" -> "Google Docs"-ish fallback "docs.google". */
