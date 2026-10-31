@@ -70,4 +70,5 @@ th { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weigh
 .choice:first-of-type { border-top: 0; }
 .checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 12px; margin-top: 10px; }
 .check { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.check[hidden] { display: none; }
 textarea { resize: vertical; }

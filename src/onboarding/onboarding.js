@@ -1,4 +1,5 @@
 import { bg, esc, progressText } from '../lib/ui-common.js';
+import { withoutNames } from '../lib/onboarding.js';
 
 const $ = (id) => document.getElementById(id);
 const steps = [...document.querySelectorAll('.step')];
@@ -12,17 +13,27 @@ function chip(container, value, checked, cls = 'chip') {
   container.insertAdjacentHTML('beforeend',
     `<label class="${cls}" for="${id}"><input type="checkbox" id="${id}" value="${esc(value)}" ${checked ? 'checked' : ''} /> ${esc(value)}</label>`);
 }
-const ticked = (container) => [...container.querySelectorAll('input:checked')].map((i) => i.value);
+const ticked = (container) => [...container.querySelectorAll('label:not([hidden]) > input:checked')].map((i) => i.value);
 const listed = (container) => new Set([...container.querySelectorAll('input')].map((i) => i.value.toLowerCase()));
 
 function addCategory(name, checked = true) {
   const box = $('categories');
   if (!name || listed(box).has(name.toLowerCase())) return;
   chip(box, name, checked, 'check');
+  if (steps[at]?.dataset.step === 'categories') hideWorkNames();
+}
+
+const projectList = () => split($('projects').value, /\n|,/);
+
+// The company and the projects already have folders, so a category of the same name is not offered.
+function hideWorkNames() {
+  const keep = new Set(withoutNames([...listed($('categories'))], [$('company').value, ...projectList()]));
+  for (const i of $('categories').querySelectorAll('input')) i.parentElement.hidden = !keep.has(i.value.toLowerCase());
 }
 
 function show(i) {
   at = i;
+  if (steps[i].dataset.step === 'categories') hideWorkNames();
   steps.forEach((s, j) => { s.hidden = j !== i; });
   $('back').hidden = i === 0 || i === last;
   $('next').hidden = i === last;
@@ -37,7 +48,7 @@ async function finish() {
     company: $('company').value,
     companyDomains: [...ticked($('domains')), ...split($('moreDomains').value, ',')],
     work: $('work').value,
-    projects: split($('projects').value, /\n|,/),
+    projects: projectList(),
     style: document.querySelector('input[name=style]:checked').value,
     categories: ticked($('categories')),
   };

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.chrome = { runtime: { getURL: (p) => `chrome-extension://x/${p}` } };
-const { saveProfile, onboardingSuggestions, registrableDomain } = await import('../src/lib/onboarding.js');
+const { saveProfile, onboardingSuggestions, registrableDomain, withoutNames } = await import('../src/lib/onboarding.js');
 
 const fresh = () => ({ categories: {}, profile: {} });
 
@@ -84,4 +84,34 @@ test('saveProfile with a new company name renames the company folder instead of 
   const companies = Object.values(st.categories).filter((c) => c.kind === 'company');
   assert.deepEqual(companies.map((c) => [c.id, c.name]), [[id, 'AWS']]);
   assert.equal(Object.values(st.categories).find((c) => c.name === 'Acme').parentId, id);
+});
+
+test('saveProfile leaves out a category named after the company or a project, so neither becomes personal', () => {
+  // onboardingSuggestions offers these names: bookmark folders carry the employer's name, and the company's tabs dominate the terms.
+  const tabs = [
+    { url: 'https://w.amazon.com/a', title: 'Acme quarterly review - Amazon Wiki' },
+    { url: 'https://code.amazon.com/b', title: 'Acme pipeline - Amazon Code' },
+    { url: 'https://amazon.com/c', title: 'Kyoto hotels' },
+    { url: 'https://booking.com/d', title: 'Kyoto ryokan' },
+    { url: 'https://x.org/e', title: 'Weather' },
+  ];
+  const offered = onboardingSuggestions(tabs, [{ name: 'Amazon' }]).categories;
+  assert.ok(offered.includes('Amazon') && offered.includes('Acme'), offered.join(', '));
+
+  const st = fresh();
+  saveProfile(st, { company: 'Amazon', projects: ['Acme', 'amazon'], categories: ['acme', 'AMAZON', 'Kyoto'] });
+  const byName = Object.fromEntries(Object.values(st.categories).map((c) => [c.name, c]));
+  assert.deepEqual(Object.keys(byName).sort(), ['Acme', 'Amazon', 'Kyoto']);
+  assert.equal(byName.Amazon.kind, 'company');
+  assert.equal(byName.Amazon.parentId, null);
+  assert.equal(byName.Acme.kind, 'work');
+  assert.equal(byName.Acme.parentId, byName.Amazon.id);
+  assert.equal(byName.Kyoto.kind, 'personal');
+  assert.deepEqual(st.profile.projects, ['Acme']);
+  assert.deepEqual(st.profile.categories, ['Kyoto']);
+});
+
+test('withoutNames drops names already taken, ignoring case and blanks', () => {
+  assert.deepEqual(withoutNames([' Acme ', 'Travel', 'amazon', ''], ['Amazon', ' acme', '']), ['Travel']);
+  assert.deepEqual(withoutNames(['Travel'], []), ['Travel']);
 });

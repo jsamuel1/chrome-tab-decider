@@ -67,19 +67,32 @@ export function onboardingSuggestions(tabs, folders, tabMeta = {}) {
 const clean = (list) => (list || []).map((x) => String(x).trim()).filter(Boolean);
 
 /**
+ * `names` without any that match one already taken (case-insensitive). A category named after the
+ * company or a project would otherwise turn that work folder into a personal one when it is saved.
+ */
+export function withoutNames(names, taken) {
+  const t = new Set(clean(taken).map((x) => x.toLowerCase()));
+  return clean(names).filter((n) => !t.has(n.toLowerCase()));
+}
+
+/**
  * Store the answers as the profile, and make their folders: the company, one work folder per project
- * under it, and one personal folder per chosen category. Run again, it renames the company folder
+ * under it, and one personal folder per chosen category. A project or category with the company's
+ * name, or a category with a project's name, is left out. Run again, it renames the company folder
  * rather than making a second one.
  */
 export function saveProfile(st, answers) {
   const a = answers || {};
+  const name = String(a.company || '').trim();
+  // Each name is one folder, so the company outranks a project, and a project outranks a category.
+  const projects = withoutNames(a.projects, [name]);
   st.profile = {
-    company: String(a.company || '').trim(),
+    company: name,
     companyDomains: [...new Set(clean(a.companyDomains).map((d) => d.toLowerCase()))],
     work: String(a.work || '').trim(),
-    projects: clean(a.projects),
+    projects,
     style: a.style === 'generic' ? 'generic' : 'specific-work',
-    categories: clean(a.categories),
+    categories: withoutNames(a.categories, [name, ...projects]),
     onboarded: true,
   };
   const p = st.profile;
