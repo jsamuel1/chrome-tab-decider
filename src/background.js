@@ -1,17 +1,18 @@
 // TabSage service worker: wires Chrome events to the organizer, sorter, persistence and archive.
 
 import { getSettings, setSettings, getState, updateState, flushState, DEFAULT_SETTINGS } from './lib/store.js';
-import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat, markActivity, saveWhy } from './lib/organizer.js';
+import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat, markActivity, saveWhy, noteTabClosed, noteUnpinned } from './lib/organizer.js';
 import { deleteReason as removeReason } from './lib/reasons.js';
 import { sortAll } from './lib/sorter.js';
 import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
 import { runArchive, search, reopenArchived, deleteArchived } from './lib/archive.js';
 import { ai, closeOffscreen, ensureOffscreen, unloadIfIdle } from './lib/ai.js';
 import { modelError } from './engine/models.js';
-import { hostOf, realUrl, pageKey } from './lib/urls.js';
+import { hostOf, isGroupable, realUrl, pageKey } from './lib/urls.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
 import { isRename, nameFromTitle } from './lib/grouping.js';
 import { detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
+import { recordUse, pruneUsage } from './lib/usage.js';
 
 // ---------- debouncers
 const timers = {};
@@ -31,7 +32,10 @@ const scheduleSort = async () => {
 // Page details and last-used times are only kept while the page is open in a tab.
 const scheduleTidy = (ms = 5000) => debounce('tidy', ms, async () => {
   const tabs = await chrome.tabs.query({ windowType: 'normal' });
-  await updateState((st) => { pruneTabMeta(st, tabs); });
+  await updateState((st) => {
+    pruneTabMeta(st, tabs);
+    st.usage = pruneUsage(st.usage, Date.now());
+  });
 });
 
 let startingUp = false;
@@ -129,6 +133,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     scheduleSnapshot();
   }
   if (startingUp) return;
+  if (info.pinned === false) noteUnpinned(tab);
   if (info.status === 'complete' || info.url || info.title) {
     if (info.url) {
       markActivity();
@@ -148,6 +153,8 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
     const url = pageKey(realUrl(tab));
     const now = Date.now();
     await updateState(async (st) => {
+      // pinned tabs count too: the pages used most are the ones that end up pinned
+      if (isGroupable({ ...tab, pinned: false })) st.usage = recordUse(st.usage, url, now);
       if (tracked(tab)) st.tabMeta[url] = { ...(st.tabMeta[url] || { firstSeen: now }), lastAccessed: now };
       const catId = await catForGroup(tab.groupId);
       if (catId && st.categories[catId]) st.categories[catId].lastActive = now;
@@ -160,6 +167,7 @@ chrome.tabs.onRemoved.addListener((tabId, { isWindowClosing }) => {
   manualTabs.delete(tabId);
   markActivity();
   if (isWindowClosing) return; // window/browser closing: keep the snapshot as-is for restore
+  noteTabClosed(tabId);
   scheduleSnapshot();
   scheduleTidy();
 });

@@ -9,6 +9,8 @@ export const DEFAULT_SETTINGS = {
   autoDiscover: true,           // re-run category discovery when "Other" grows
   otherRediscoverThreshold: 6,  // tabs in Other (from ≥3 domains) before re-discovery
   collapseInactiveGroups: false,
+  pinnedMax: 5,                 // most-used pages TabSage keeps as Chrome pinned tabs
+  dailyMax: 8,                  // next tier, kept in the Daily group
   // Sorting
   groupSort: 'mru',             // 'mru' | 'count' | 'alpha' | 'manual'
   tabSort: 'domain-mru',        // 'domain-mru' | 'mru' | 'title' | 'manual'

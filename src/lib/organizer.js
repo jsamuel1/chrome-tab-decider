@@ -2,7 +2,7 @@
 
 import { getSettings, getState, updateState } from './store.js';
 import { hostOf, isGroupable, pageKey, realUrl } from './urls.js';
-import { DAILY_ID, OTHER_ID, ensureOther, findByName, mergeCategories } from './categories.js';
+import { DAILY_ID, OTHER_ID, ensureDaily, ensureOther, findByName, mergeCategories } from './categories.js';
 import { ai, classifierReady, deciderStatus } from './ai.js';
 import { candidateTerms } from './bm25.js';
 import { profileText } from './profile.js';
@@ -11,6 +11,7 @@ import { groupTitle, isRename, nameFromTitle, planGroups } from './grouping.js';
 import { decisionOrder, decisionState, pageText, shortlist, shouldMove } from './decide.js';
 import { sortAll } from './sorter.js';
 import { applyReason, whyOptions } from './reasons.js';
+import { planPins, startCooldown } from './usage.js';
 
 // Tab group changes we caused (so they aren't mistaken for the user teaching us).
 export const expectedGroupChange = new Map(); // tabId -> groupId | '*'
@@ -66,6 +67,9 @@ export function organize(opts = {}) {
   chain = run;
   return run;
 }
+
+// Tabs we are unpinning ourselves, so the change is not mistaken for the user's.
+const expectedUnpin = new Set();
 
 const realCats = (st) => Object.values(st.categories).filter((c) => c.id !== OTHER_ID && c.id !== DAILY_ID);
 const keyOf = (t) => pageKey(realUrl(t));
@@ -308,18 +312,27 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   }
   if (more) chrome.alarms.create('organize-more', { delayInMinutes: 0.5 });
 
-  // --- 5. folders → groups: the lowest-ranked fold into their parents. The tabs are read again, as
-  // the classifier may have taken a while and the user may have moved, closed or switched tabs.
-  const fresh = eligible(await chrome.tabs.query({ windowType: 'normal' }));
+  // --- 5. pinned tabs and the Daily group. The tabs are read again, as the classifier may have taken
+  // a while and the user may have moved, closed or switched tabs.
+  let live = await chrome.tabs.query({ windowType: 'normal' });
+  const looking = await lookingAtNow();
+  const { daily, changed } = await applyPins(st, settings, live, eligible(live), looking, now);
+  if (changed) live = await chrome.tabs.query({ windowType: 'normal' });
+  await rememberPinTabs(st, live);
+  if (daily.size) ensureDaily(st);
+
+  // --- 6. folders → groups: the lowest-ranked fold into their parents. Daily pages show in Daily.
+  const fresh = eligible(live);
+  const idOf = (t) => (daily.has(keyOf(t)) ? DAILY_ID : st.pageMap[keyOf(t)]?.catId);
   const counts = new Map();
   for (const t of fresh) {
-    const id = st.pageMap[keyOf(t)]?.catId;
+    const id = idOf(t);
     if (st.categories[id]) counts.set(id, (counts.get(id) || 0) + 1);
   }
   const plan = planGroups(Object.values(st.categories), counts, settings.maxGroups);
   const byWindow = new Map();
   for (const t of fresh) {
-    const id = st.pageMap[keyOf(t)]?.catId;
+    const id = idOf(t);
     if (!st.categories[id]) continue; // the decider could not place it: leave the tab be
     const catId = plan.get(id) || OTHER_ID;
     if (!byWindow.has(t.windowId)) byWindow.set(t.windowId, new Map());
@@ -328,7 +341,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
     m.get(catId).push(t);
   }
 
-  // --- 6. apply to Chrome tab groups, per window
+  // --- 7. apply to Chrome tab groups, per window
   for (const [windowId, cats] of byWindow) {
     const groups = await chrome.tabGroups.query({ windowId });
     const gidFor = new Map();
@@ -369,7 +382,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
     }
   }
 
-  // --- 7. tidy: decisions for closed pages (hand-placed ones are kept), and stale categories
+  // --- 8. tidy: decisions for closed pages (hand-placed ones are kept), and stale categories
   const open = new Set(all.map(keyOf));
   for (const [k, m] of Object.entries(st.pageMap)) if (!m.fixed && !open.has(k)) delete st.pageMap[k];
   const mapped = new Set([st.siteRules, st.pageMap].flatMap((m) => Object.values(m).map((x) => x.catId)));
@@ -380,6 +393,82 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   st.stats = { organizedAt: now, lastEngine, reason };
   await updateState(() => {}, { immediate: true });
   await sortAll();
+}
+
+const pinnable = (t) => !t.incognito && isGroupable({ ...t, pinned: false });
+
+/**
+ * Pin and unpin tabs by how much their pages are used; returns the pages for the Daily group.
+ * Pages the user pinned or placed by hand are left alone, and so is the tab being looked at.
+ */
+async function applyPins(st, settings, live, fresh, looking, now) {
+  const open = [];
+  for (const t of live) if (t.pinned && pinnable(t)) open.push({ key: keyOf(t), tabId: t.id, pinned: true, userPinned: !st.ourPins[keyOf(t)] });
+  for (const t of fresh) {
+    const m = st.pageMap[keyOf(t)];
+    if (m?.fixed && m.source === 'user') continue;
+    open.push({ key: keyOf(t), tabId: t.id, pinned: false, userPinned: false, inDaily: groupCat.get(t.groupId) === DAILY_ID });
+  }
+  const plan = planPins(open, st.usage, {
+    now, pinMax: settings.pinnedMax, dailyMax: settings.dailyMax, ourPins: st.ourPins, cooldown: st.pinCooldown,
+  });
+  let changed = false;
+  for (const key of plan.unpin) {
+    for (const t of live.filter((x) => x.pinned && x.id !== looking && keyOf(x) === key)) {
+      expectedUnpin.add(t.id);
+      try {
+        await chrome.tabs.update(t.id, { pinned: false });
+        delete st.ourPins[key];
+        changed = true;
+      } catch (e) {
+        expectedUnpin.delete(t.id);
+        console.warn('[TabSage] unpin failed', e.message);
+      }
+    }
+  }
+  for (const key of plan.pin) {
+    const t = fresh.find((x) => x.id !== looking && keyOf(x) === key);
+    if (!t) continue;
+    // pinning takes the tab out of its group, which is not the user pulling it out
+    if (t.groupId !== -1) expectedGroupChange.set(t.id, '*');
+    try {
+      await chrome.tabs.update(t.id, { pinned: true });
+      st.ourPins[key] = now;
+      changed = true;
+    } catch (e) {
+      expectedGroupChange.delete(t.id);
+      console.warn('[TabSage] pin failed', e.message);
+    }
+  }
+  return { daily: new Set(plan.daily), changed };
+}
+
+// tabId -> page for the tabs we pinned, kept in session storage so a closed tab can be traced back to its page.
+async function rememberPinTabs(st, live) {
+  const tabs = {};
+  for (const t of live) if (t.pinned && st.ourPins[keyOf(t)]) tabs[t.id] = keyOf(t);
+  await chrome.storage.session?.set({ ourPinTabs: tabs }).catch(() => {});
+}
+
+/** A tab was closed: if it held a page we pinned, that page stays unpinned for a while. */
+export async function noteTabClosed(tabId) {
+  const { ourPinTabs } = (await chrome.storage.session?.get('ourPinTabs').catch(() => null)) || {};
+  const key = ourPinTabs?.[tabId];
+  if (key) await dropPin(key);
+}
+
+/** A tab was unpinned: if we did not do it and we had pinned that page, it stays unpinned for a while. */
+export async function noteUnpinned(tab) {
+  if (expectedUnpin.delete(tab.id)) return;
+  await dropPin(keyOf(tab));
+}
+
+async function dropPin(key) {
+  await updateState((st) => {
+    if (!st.ourPins[key]) return;
+    delete st.ourPins[key];
+    st.pinCooldown = startCooldown(st.pinCooldown, key, Date.now());
+  });
 }
 
 /** groupId → catId, recovering from a service-worker restart via the group title. */
@@ -409,7 +498,7 @@ export async function learnFromUser(tab, groupId) {
   const url = realUrl(tab);
   const d = hostOf(url);
   const catId = await catForGroup(groupId);
-  if (!catId || !d) return;
+  if (!catId || !d || catId === DAILY_ID) return;
   const st = await updateState((st) => {
     st.pageMap[pageKey(url)] = { catId, confidence: 1, source: 'user', at: Date.now(), fixed: true };
     return st;

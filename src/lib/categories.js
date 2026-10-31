@@ -17,6 +17,17 @@ export function ensureOther(st, settings) {
   return st.categories[OTHER_ID];
 }
 
+/** The Daily group's category, made the first time a page earns a place in it. */
+export function ensureDaily(st) {
+  if (!st.categories[DAILY_ID]) {
+    st.categories[DAILY_ID] = {
+      id: DAILY_ID, name: 'Daily', description: 'the pages you use most', color: 'grey',
+      pinned: false, lastActive: 0, createdAt: Date.now(), source: 'system', kind: 'daily', parentId: null, isNew: false,
+    };
+  }
+  return st.categories[DAILY_ID];
+}
+
 export function findByName(st, name) {
   const k = String(name || '').trim().toLowerCase();
   return Object.values(st.categories).find((c) => c.name.toLowerCase() === k) || null;

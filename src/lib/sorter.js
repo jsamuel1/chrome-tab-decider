@@ -60,12 +60,14 @@ async function sortWindow(windowId, settings, st) {
       pinned: !!cat?.pinned,
       recent: Math.max(...list.map((t) => lastUsed(st, t))),
       name: cat?.name || '',
+      daily: cat?.kind === 'daily',
       isOther: cat?.id === 'other',
       firstIndex: list[0].index,
     });
   }
   const mode = settings.groupSort;
   info.sort((a, b) => {
+    if (a.daily !== b.daily) return a.daily ? -1 : 1; // Daily first, whatever the sort mode
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     if (a.isOther !== b.isOther && mode !== 'manual') return a.isOther ? 1 : -1; // Other last
     if (mode === 'mru') return b.recent - a.recent;
@@ -77,6 +79,7 @@ async function sortWindow(windowId, settings, st) {
   // Phase 1: groups in order, right after Chrome-pinned tabs.
   let index = pinnedCount;
   for (const g of info) {
+    if (g.daily) try { await chrome.tabGroups.update(g.gid, { collapsed: false }); } catch {} // Daily is never collapsed
     const cur = (await chrome.tabs.query({ windowId, groupId: g.gid }));
     if (cur.length && cur[0].index !== index) await chrome.tabGroups.move(g.gid, { index });
     index += cur.length;
@@ -97,7 +100,7 @@ async function sortWindow(windowId, settings, st) {
   if (settings.collapseInactiveGroups) {
     const [active] = await chrome.tabs.query({ windowId, active: true });
     for (const g of info) {
-      const collapsed = !active || active.groupId !== g.gid;
+      const collapsed = !g.daily && (!active || active.groupId !== g.gid);
       try { await chrome.tabGroups.update(g.gid, { collapsed }); } catch {}
     }
   }
