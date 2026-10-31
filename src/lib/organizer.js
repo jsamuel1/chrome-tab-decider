@@ -1,7 +1,7 @@
 // The organizer: domain clusters → categories → Chrome tab groups.
 
 import { getSettings, getState, setSiteRule, updateState } from './store.js';
-import { hostOf, isGroupable, realTitle, realUrl } from './urls.js';
+import { hostOf, isGroupable, pageKey, realTitle, realUrl } from './urls.js';
 import { OTHER_ID, ensureOther, findByName, mergeCategories, seedList } from './categories.js';
 import { ai, classifierReady } from './ai.js';
 import { sortAll } from './sorter.js';
@@ -128,7 +128,7 @@ async function _organize({ rediscover = false, categories = null, reassign = nul
   const candidates = groupable.filter((t) => !unknownGroup(t));
   const now = Date.now();
   for (const t of groupable) {
-    const u = realUrl(t);
+    const u = pageKey(realUrl(t));
     if (!st.tabMeta[u]) st.tabMeta[u] = { firstSeen: now, lastAccessed: t.lastAccessed || now };
   }
 

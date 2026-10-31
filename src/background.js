@@ -9,6 +9,7 @@ import { ai, closeOffscreen, ensureOffscreen, unloadIfIdle } from './lib/ai.js';
 import { modelError } from './engine/models.js';
 import { realUrl, pageKey } from './lib/urls.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
+import { detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
 
 // ---------- debouncers
 const timers = {};
@@ -25,6 +26,11 @@ const scheduleSort = async () => {
   const s = await getSettings();
   debounce('sort', s.sortDelaySec * 1000, () => sortAll().then(() => scheduleSnapshot()));
 };
+// Page details and last-used times are only kept while the page is open in a tab.
+const scheduleTidy = (ms = 5000) => debounce('tidy', ms, async () => {
+  const tabs = await chrome.tabs.query({ windowType: 'normal' });
+  await updateState((st) => { pruneTabMeta(st, tabs); });
+});
 
 let startingUp = false;
 
@@ -73,6 +79,7 @@ chrome.runtime.onStartup.addListener(async () => {
   } finally {
     startingUp = false;
     scheduleSnapshot(500);
+    scheduleTidy(30000);
   }
   prefetchModel('startup');
 });
@@ -117,7 +124,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   }
   if (startingUp) return;
   if (info.status === 'complete' || info.url || info.title) {
-    if (info.url) manualTabs.delete(tabId); // navigated somewhere new: eligible again
+    if (info.url) {
+      manualTabs.delete(tabId); // navigated somewhere new: eligible again
+      scheduleTidy();
+    }
     scheduleOrganize('tab-updated');
     scheduleSnapshot();
   }
@@ -126,10 +136,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
     const tab = await chrome.tabs.get(tabId);
-    const url = realUrl(tab);
+    if (tab.incognito) return;
+    const url = pageKey(realUrl(tab));
     const now = Date.now();
     await updateState(async (st) => {
-      st.tabMeta[url] = { ...(st.tabMeta[url] || { firstSeen: now }), lastAccessed: now };
+      if (tracked(tab)) st.tabMeta[url] = { ...(st.tabMeta[url] || { firstSeen: now }), lastAccessed: now };
       const catId = await catForGroup(tab.groupId);
       if (catId && st.categories[catId]) st.categories[catId].lastActive = now;
     });
@@ -141,6 +152,7 @@ chrome.tabs.onRemoved.addListener((tabId, { isWindowClosing }) => {
   manualTabs.delete(tabId);
   if (isWindowClosing) return; // window/browser closing: keep the snapshot as-is for restore
   scheduleSnapshot();
+  scheduleTidy();
 });
 
 chrome.windows.onRemoved.addListener(() => scheduleSnapshot(6000));
@@ -229,9 +241,11 @@ const api = {
     }, { immediate: true });
     await organize({ reason: 'forget-domain' });
   },
-  async pageDetails({ url, details }) {
-    if (!url || !details) return;
-    const key = pageKey(url);
+  async pageDetails({ url, details }, sender) {
+    if (!details || sender?.tab?.incognito) return;
+    const win = sender?.tab && await chrome.windows.get(sender.tab.windowId).catch(() => null);
+    const key = detailsKey(sender, url, win?.type);
+    if (!key) return;
     await updateState((st) => {
       const now = Date.now();
       st.tabMeta[key] = { ...(st.tabMeta[key] || { firstSeen: now, lastAccessed: now }), details };
@@ -263,12 +277,12 @@ const api = {
   },
 };
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.target !== 'background') return false;
   const h = api[msg.type];
   if (!h) return false;
   Promise.resolve()
-    .then(() => h(msg))
+    .then(() => h(msg, sender))
     .then((r) => sendResponse({ ok: true, result: r }))
     .catch((e) => {
       console.error('[TabSage]', msg.type, e);

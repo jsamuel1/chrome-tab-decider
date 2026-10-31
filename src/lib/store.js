@@ -39,7 +39,7 @@ const DEFAULT_STATE = {
   ourPins: {},      // pageKey -> time we pinned it
   pinCooldown: {},  // pageKey -> time before which we do not pin it again
   profile: { company: '', companyDomains: [], work: '', projects: [], style: 'specific-work', categories: [], onboarded: false },
-  tabMeta: {},      // realUrl -> { firstSeen, lastAccessed }
+  tabMeta: {},      // pageKey -> { firstSeen, lastAccessed, details }, only for pages open in a tab
   snapshot: null,   // last persisted window/group/tab layout
   archive: [],      // [{ id, url, title, favIconUrl, domain, catName, archivedAt, lastAccessed }]
   lastDiscovery: 0,
@@ -80,6 +80,21 @@ export function migrate(st) {
     if (c.kind === undefined) c.kind = 'personal';
     if (c.parentId === undefined) c.parentId = null;
     if (c.isNew === undefined) c.isNew = false;
+  }
+  // tabMeta used to be keyed by the full URL; it is keyed by pageKey (no #fragment) now, so fold old keys in.
+  if (st.tabMeta) {
+    for (const [k, m] of Object.entries(st.tabMeta)) {
+      const i = k.indexOf('#');
+      if (i === -1) continue;
+      const key = k.slice(0, i);
+      const cur = st.tabMeta[key];
+      st.tabMeta[key] = cur ? {
+        ...m, ...cur,
+        firstSeen: Math.min(cur.firstSeen ?? Infinity, m.firstSeen ?? Infinity),
+        lastAccessed: Math.max(cur.lastAccessed || 0, m.lastAccessed || 0),
+      } : m;
+      delete st.tabMeta[k];
+    }
   }
   // Only state from before the page-based model has a domainMap to carry over. The interim organizer
   // keeps a fresh domainMap of its own afterwards, which must survive service-worker restarts.

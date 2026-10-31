@@ -1,11 +1,11 @@
 // Dynamic ordering: pinned groups first, then groups by the chosen mode; tabs within groups likewise.
 
 import { getSettings, getState } from './store.js';
-import { hostOf, realTitle, realUrl } from './urls.js';
+import { hostOf, pageKey, realTitle, realUrl } from './urls.js';
 import { catForGroup } from './organizer.js';
 import { classifierReady } from './ai.js';
 
-const lastUsed = (st, t) => Math.max(st.tabMeta[realUrl(t)]?.lastAccessed || 0, t.lastAccessed || 0);
+const lastUsed = (st, t) => Math.max(st.tabMeta[pageKey(realUrl(t))]?.lastAccessed || 0, t.lastAccessed || 0);
 
 function orderTabs(tabs, mode, st, settings) {
   if (mode === 'manual') return tabs;

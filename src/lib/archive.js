@@ -1,7 +1,7 @@
 // Trim ad-hoc tabs that haven't been revisited in N days: close them but keep them searchable.
 
 import { getSettings, getState, updateState, uid } from './store.js';
-import { hostOf, isGroupable, lazyUrl, realTitle, realUrl } from './urls.js';
+import { hostOf, isGroupable, lazyUrl, pageKey, realTitle, realUrl } from './urls.js';
 import { catForGroup, organize } from './organizer.js';
 import { OTHER_ID } from './categories.js';
 
@@ -18,7 +18,7 @@ export async function runArchive({ dryRun = false } = {}) {
     const cat = catId && st.categories[catId];
     if (cat?.pinned) continue;
     if (settings.archiveScope === 'other' && catId !== OTHER_ID) continue;
-    const meta = st.tabMeta[realUrl(t)];
+    const meta = st.tabMeta[pageKey(realUrl(t))];
     const last = Math.max(meta?.lastAccessed || 0, t.lastAccessed || 0, meta ? 0 : Date.now());
     if (last < cutoff) victims.push({ t, cat, last });
   }
@@ -34,7 +34,7 @@ export async function runArchive({ dryRun = false } = {}) {
         domain: hostOf(url), catName: cat?.name || '',
         archivedAt: Date.now(), lastAccessed: last,
       });
-      delete s.tabMeta[url];
+      delete s.tabMeta[pageKey(url)];
     }
     if (s.archive.length > settings.archiveMax) s.archive.length = settings.archiveMax;
   }, { immediate: true });
@@ -73,7 +73,7 @@ export async function reopenArchived(id, { lazy = false } = {}) {
   const tab = await chrome.tabs.create({ url: lazy ? lazyUrl(item) : item.url, active: !lazy });
   await updateState((s) => {
     s.archive = s.archive.filter((a) => a.id !== id);
-    s.tabMeta[item.url] = { firstSeen: Date.now(), lastAccessed: Date.now() };
+    s.tabMeta[pageKey(item.url)] = { firstSeen: Date.now(), lastAccessed: Date.now() };
   });
   setTimeout(() => organize({ reason: 'reopen' }), 800);
   return tab.id;
