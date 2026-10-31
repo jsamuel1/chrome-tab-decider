@@ -459,18 +459,28 @@ async function rememberPinTabs(st, live) {
 }
 
 // A tab we pinned that moved to another page (a link clicked in a pinned web app) is still our pin:
-// the pin follows the tab, and the new page keeps the old one's standing. Pages we pinned earlier this
-// session that no pinned tab holds any more are forgotten, so a later pin of yours there is yours.
+// the pin follows the tab, and the new page keeps the old one's standing. A page none of our pinned
+// tabs shows any more is forgotten, so a pin of yours there is yours. If that is because the tab was
+// closed or unpinned (and this runs before noteTabClosed or noteUnpinned could), the page also gets
+// its cooldown, as it would have from those.
 function followPins(st, live, pinned, now) {
-  for (const t of live) {
-    const from = pinned[t.id];
+  const byId = new Map(live.map((t) => [t.id, t]));
+  const ours = new Set();
+  for (const [id, from] of Object.entries(pinned)) {
+    const t = byId.get(Number(id));
+    if (!t?.pinned || !st.ourPins[from]) continue;
     const to = keyOf(t);
-    if (!t.pinned || !from || from === to || !st.ourPins[from]) continue;
-    st.ourPins[to] = st.ourPins[from];
-    st.usage = carryUse(st.usage, from, to, now);
+    if (to !== from) {
+      st.ourPins[to] = st.ourPins[from];
+      st.usage = carryUse(st.usage, from, to, now);
+    }
+    ours.add(to);
   }
-  const held = new Set(live.filter((t) => t.pinned).map(keyOf));
-  for (const key of Object.values(pinned)) if (!held.has(key)) delete st.ourPins[key];
+  for (const [id, key] of Object.entries(pinned)) {
+    if (ours.has(key) || !st.ourPins[key]) continue;
+    delete st.ourPins[key];
+    if (!byId.get(Number(id))?.pinned) st.pinCooldown = startCooldown(st.pinCooldown, key, now);
+  }
 }
 
 /** A pinned tab went to another page: if we had pinned it, the pin follows the tab. */
@@ -484,8 +494,10 @@ export async function notePinnedNavigated(tab) {
     followPins(st, live.map((t) => (t.id === tab.id ? tab : t)), pinned, now);
     return st;
   });
-  const tabs = {};
-  for (const [id, key] of Object.entries(pinned)) if (Number(id) !== tab.id) tabs[id] = key;
+  // the map is read again here: an organize run may have written it meanwhile, and only this tab's
+  // entry is ours to change
+  const tabs = await pinTabs();
+  delete tabs[tab.id];
   if (st.ourPins[keyOf(tab)]) tabs[tab.id] = keyOf(tab);
   await savePinTabs(tabs);
 }

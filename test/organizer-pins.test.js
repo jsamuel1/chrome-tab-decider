@@ -234,3 +234,61 @@ test('a tab you put in Daily yourself stays there', async () => {
     assert.equal(st.pageMap[url(3)].source, 'user');
   });
 });
+
+test('a pin that follows its tab keeps entries the organizer wrote for other tabs meanwhile', async () => {
+  await reset([tab(1), tab(2)], { 1: 50, 2: 40 });
+  await organize({ reason: 'test' });
+  assert.deepEqual(session.ourPinTabs, { 1: url(1), 2: url(2) });
+
+  tabs[0].url = 'https://site1.example.com/inbox/42';
+  const query = chrome.tabs.query;
+  // an organize run finishes while this call is working: it pins tab 5 and writes the map
+  chrome.tabs.query = async (q) => {
+    session.ourPinTabs = { 1: url(1), 2: url(2), 5: url(5) };
+    return query(q);
+  };
+  try {
+    await notePinnedNavigated(structuredClone(tabs[0]));
+  } finally {
+    chrome.tabs.query = query;
+  }
+  assert.deepEqual(session.ourPinTabs, { 1: 'https://site1.example.com/inbox/42', 2: url(2), 5: url(5) });
+});
+
+test('when our pin moves off a page you also pinned yourself, your tab there is yours', async () => {
+  const st = await reset([tab(1), tab(2)], { 1: 50 });
+  await withSettings({ pinnedMax: 2, dailyMax: 0 }, async () => {
+    await organize({ reason: 'test' });
+    assert.deepEqual(session.ourPinTabs, { 1: url(1) });
+
+    tabs.push(tab(4, { url: url(1), pinned: true })); // your own pin on the same page
+    tabs[0].url = 'https://site1.example.com/inbox/42';
+    await organize({ reason: 'test' });
+    assert.deepEqual(Object.keys(st.ourPins), ['https://site1.example.com/inbox/42']);
+    assert.deepEqual(session.ourPinTabs, { 1: 'https://site1.example.com/inbox/42' });
+
+    for (let i = 0; i < 200; i++) st.usage = recordUse(st.usage, url(2), Date.now());
+    updated.length = 0;
+    await organize({ reason: 'test' });
+    assert.ok(tabs.find((t) => t.id === 4).pinned);
+    assert.ok(!updated.some(([id, o]) => id === 4 && o.pinned === false), 'your own pin was unpinned');
+  });
+});
+
+test('a pin closed or unpinned just before an organize run still starts the cooldown', async () => {
+  const st = await reset([tab(1), tab(2)], { 1: 50, 2: 40 });
+  await organize({ reason: 'test' });
+  assert.ok(tabs.every((t) => t.pinned));
+
+  tabs.splice(0, 1); // tab 1 closed; organize runs before noteTabClosed
+  tabs[0].pinned = false; // tab 2 unpinned by you; organize runs before noteUnpinned
+  await organize({ reason: 'test' });
+  assert.ok(st.pinCooldown[url(1)] > Date.now() + 2 * DAY);
+  assert.ok(st.pinCooldown[url(2)] > Date.now() + 2 * DAY);
+  assert.ok(!tabs[0].pinned, 'a page you just unpinned was pinned again');
+  assert.deepEqual(st.ourPins, {});
+
+  await noteTabClosed(1);
+  await noteUnpinned({ ...tab(2), pinned: false });
+  assert.ok(st.pinCooldown[url(1)] > Date.now() + 2 * DAY);
+});
