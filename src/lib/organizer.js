@@ -3,7 +3,6 @@
 import { getSettings, getState, updateState } from './store.js';
 import { domainKey, isGroupable, realTitle, realUrl } from './urls.js';
 import { OTHER_ID, ensureOther, findByName, mergeCategories, seedList } from './categories.js';
-import { heuristicAssign, heuristicDiscover, hostHint } from './heuristics.js';
 import { ai } from './ai.js';
 import { sortAll } from './sorter.js';
 
@@ -45,7 +44,7 @@ async function discover(st, settings, tabs, mode) {
   const items = tabs.map((t) => ({ domain: domainKey(realUrl(t), settings.domainKey), title: realTitle(t) }));
   const existing = Object.values(st.categories).filter((c) => c.id !== OTHER_ID).map((c) => ({ name: c.name, description: c.description }));
   let found = null;
-  let engine = 'heuristic';
+  let engine = 'none';
   if (settings.useLLM) {
     try {
       const r = await ai('llm.discover', { items, existing, max: settings.maxGroups, mode });
@@ -54,28 +53,26 @@ async function discover(st, settings, tabs, mode) {
         engine = 'llm';
       }
     } catch (e) {
-      console.warn('[TabSage] LLM discovery failed, using keywords', e);
+      console.warn('[TabSage] LLM discovery failed', e);
     }
   }
-  if (!found) found = mode === 'incremental' ? [] : heuristicDiscover(items, settings.maxGroups);
+  if (!found) found = [];
   mergeCategories(st, [...seedList(settings), ...found], engine);
   st.lastDiscovery = Date.now();
   console.info(`[TabSage] discovery (${mode}, ${engine}):`, found.map((c) => c.name));
   return found;
 }
 
-/** Choose a category for one domain cluster. */
+/** Choose a category for one domain cluster; null leaves its tabs where they are. */
 async function assign(st, settings, cluster, cats) {
   const other = st.categories[OTHER_ID];
   const options = [...cats.filter((c) => c.id !== OTHER_ID).slice(0, 20), other];
   if (options.length === 1) return { catId: OTHER_ID, confidence: 1, source: 'none' };
-  const state = clusterState(cluster);
   const mk = (cat, confidence, source) => ({ catId: cat?.id || OTHER_ID, confidence, source });
 
-  // 1) Strands Decider (WebGPU)
   try {
     const r = await ai('decider.choice', {
-      settings, state,
+      settings, state: clusterState(cluster),
       instructions: 'Which folder should these browser tabs go in?',
       options: options.map((c) => ({ name: c.name, description: c.description })),
     }, 30 * 60 * 1000);
@@ -88,29 +85,17 @@ async function assign(st, settings, cluster, cats) {
   } catch (e) {
     console.warn('[TabSage] decider failed', e);
   }
-  // 2) Built-in LLM
-  if (settings.useLLM) {
-    try {
-      const r = await ai('llm.assign', { state, names: options.map((c) => c.name) });
-      if (!r.error) {
-        lastEngine = 'llm';
-        return mk(findByName(st, r.folder) || other, 0.5, 'llm');
-      }
-    } catch (e) {
-      console.warn('[TabSage] llm assign failed', e);
-    }
+  return null;
+}
+
+/** True only once the classifier is downloaded; with no model TabSage leaves every tab alone. */
+export async function classifierReady(settings) {
+  try {
+    const r = await ai('decider.status', { settings }, 15000);
+    return !!r?.downloaded;
+  } catch {
+    return false;
   }
-  // 3) Keywords / host hints
-  lastEngine = 'heuristic';
-  const titles = cluster.tabs.map(realTitle);
-  const h = heuristicAssign(cluster.domain, titles, options.filter((c) => c.id !== OTHER_ID));
-  if (h) return mk(h, 0.3, 'heuristic');
-  const hint = hostHint(cluster.domain);
-  if (hint) {
-    const [cat] = mergeCategories(st, [{ name: hint, description: `${hint} sites` }], 'heuristic');
-    return mk(cat, 0.3, 'heuristic');
-  }
-  return mk(other, 0, 'heuristic');
 }
 
 /** Adopt user-created, named groups as categories (and teach their domains). */
@@ -133,6 +118,7 @@ async function adoptUserGroups(st, settings) {
 async function _organize({ rediscover = false, categories = null, reassign = null, reason = '' } = {}) {
   const settings = await getSettings();
   if (!settings.enabled) return;
+  if (!(await classifierReady(settings))) return { skipped: 'model-not-ready' };
   const st = await getState();
   ensureOther(st, settings);
   await adoptUserGroups(st, settings);
@@ -181,7 +167,7 @@ async function _organize({ rediscover = false, categories = null, reassign = nul
   for (const c of clusters.values()) {
     if (!needs(c)) continue;
     const r = await assign(st, settings, c, rankedCats());
-    st.domainMap[c.domain] = { ...r, at: Date.now() };
+    if (r) st.domainMap[c.domain] = { ...r, at: Date.now() };
   }
 
   // --- 3. Other is filling up → incremental discovery, then re-ask for those domains
@@ -190,7 +176,12 @@ async function _organize({ rediscover = false, categories = null, reassign = nul
     const otherTabs = otherClusters.flatMap((c) => c.tabs);
     if (otherTabs.length >= settings.otherRediscoverThreshold && otherClusters.length >= 3 && now - st.lastDiscovery > 10 * 60 * 1000) {
       const added = await discover(st, settings, otherTabs, 'incremental');
-      if (added.length) for (const c of otherClusters) st.domainMap[c.domain] = { ...(await assign(st, settings, c, rankedCats())), at: Date.now() };
+      if (added.length) {
+        for (const c of otherClusters) {
+          const r = await assign(st, settings, c, rankedCats());
+          if (r) st.domainMap[c.domain] = { ...r, at: Date.now() };
+        }
+      }
     }
   }
 
@@ -207,6 +198,7 @@ async function _organize({ rediscover = false, categories = null, reassign = nul
   // --- 5. apply to Chrome tab groups, per window
   const byWindow = new Map();
   for (const c of clusters.values()) {
+    if (!st.categories[st.domainMap[c.domain]?.catId]) continue; // the decider could not place it: leave its tabs be
     const catId = effective(c.domain);
     for (const t of c.tabs) {
       if (!byWindow.has(t.windowId)) byWindow.set(t.windowId, new Map());

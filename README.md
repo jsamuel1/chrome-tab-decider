@@ -81,7 +81,7 @@ static/                    manifest, popup, options, lazy placeholder
 ## Tests
 
 ```bash
-npm test                                   # prompt rendering vs upstream fixtures, heuristics, URL helpers
+npm test                                   # prompt rendering vs upstream fixtures, URL helpers
 NODE_PATH=$(npm root -g) node test/e2e/run.mjs   # loads dist/ in Chromium (Playwright), organizes test tabs
 ```
 

@@ -50,10 +50,10 @@ export function engineSummary(status) {
   if (e.error) parts.push(`<span class="warn">Engine error: ${esc(e.error)}</span>`);
   else if (e.loading && e.progress) {
     const pct = Math.round((e.progress.overall || 0) * 100);
-    parts.push(`Classifier: <b>${e.progress.stage === 'compiling' ? 'compiling shaders…' : `downloading ${pct}%`}</b><progress max="100" value="${pct}"></progress>`);
+    parts.push(`Classifier: <b>Waiting for the classifier: ${e.progress.stage === 'compiling' ? 'compiling shaders…' : `downloading ${pct}%`}</b><progress max="100" value="${pct}"></progress>`);
   } else if (e.loaded) parts.push(`Classifier: <b class="ok">Strands Decider ready</b> (${esc(e.device)})`);
   else if (e.downloaded) parts.push(`Classifier: <b>Strands Decider</b> downloaded, loads on demand`);
-  else parts.push(`Classifier: <span class="warn">model not downloaded</span> — <a href="options.html" target="_blank">download in Settings</a> (keyword fallback in use)`);
+  else parts.push(`Classifier: <span class="warn">Waiting for the classifier</span> — <a href="options.html" target="_blank">download in Settings</a>. TabSage leaves your tabs alone until it is ready.`);
   const llm = {
     available: '<b class="ok">ready</b>',
     downloadable: '<span class="warn">needs download (Settings)</span>',

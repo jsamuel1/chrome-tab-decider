@@ -42,7 +42,7 @@ export async function unloadIfIdle(idleMin) {
   return true;
 }
 
-export async function ai(type, payload = {}, timeoutMs = 120000) {
+async function realAi(type, payload = {}, timeoutMs = 120000) {
   await ensureOffscreen();
   const res = await Promise.race([
     chrome.runtime.sendMessage({ target: 'offscreen', type, ...payload }),
@@ -51,4 +51,15 @@ export async function ai(type, payload = {}, timeoutMs = 120000) {
   if (!res) throw new Error(`${type}: no response from engine`);
   if (!res.ok) throw new Error(res.error);
   return res.result;
+}
+
+let impl = realAi;
+
+export function ai(type, payload, timeoutMs) {
+  return impl(type, payload, timeoutMs);
+}
+
+/** Tests swap the engine call for a stub; pass nothing to restore it. */
+export function setAiForTest(fn) {
+  impl = fn || realAi;
 }

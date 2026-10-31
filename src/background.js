@@ -176,7 +176,8 @@ const api = {
       cats.push({ ...c, tabCount: n, groupIds: gids, domains });
     }
     cats.sort((a, b) => (b.pinned - a.pinned) || (b.tabCount - a.tabCount));
-    return { settings, engine, llm, categories: cats, archiveCount: st.archive.length, stats: st.stats, snapshotAt: st.snapshot?.savedAt };
+    const ready = !!engine?.downloaded;
+    return { settings, engine, ready, llm, categories: cats, archiveCount: st.archive.length, stats: st.stats, snapshotAt: st.snapshot?.savedAt };
   },
   organize: ({ rediscover, categories }) => organize({ rediscover, categories, reason: 'manual' }).then(() => scheduleSnapshot(300)),
   sort: () => sortAll(),
