@@ -55,6 +55,8 @@ test('candidateTerms lets a bigram replace unigrams covering the same documents'
   assert.deepEqual(terms, ['home assistant']);
 });
 
+// A bigram hides one of its words only when it covers the same documents and its other word is also a candidate.
+// Here 'home' is in most documents, so 'assistant' stays next to 'home assistant', just as 'acme' stays next to 'the acme' below.
 test('candidateTerms keeps a bigram whose first word is in most documents', () => {
   const docs = [
     { id: '1', text: 'Home Assistant a' },
@@ -120,4 +122,31 @@ test('tokenize keeps a single Han ideograph but drops a single kana', () => {
   const t = tokenize('猫の写真', 'ja');
   assert.ok(t.includes('猫'));
   assert.ok(!t.includes('の'));
+});
+
+test('candidateTerms pairs Korean words that are separated by a space', () => {
+  const docs = [
+    { id: '1', text: '서울 여행 계획' },
+    { id: '2', text: '서울 여행 후기' },
+    { id: '3', text: 'Cat photos' },
+    { id: '4', text: 'Tax forms' },
+    { id: '5', text: 'Bike repair' },
+    { id: '6', text: 'Guitar chords' },
+  ];
+  const terms = candidateTerms(docs).map((c) => c.term);
+  assert.deepEqual(terms, ['서울 여행']);
+});
+
+test('candidateTerms does not join Chinese words that touch with no space', () => {
+  const docs = [
+    { id: '1', text: '北京旅游攻略' },
+    { id: '2', text: '北京旅游地图' },
+    { id: '3', text: 'Cat photos' },
+    { id: '4', text: 'Tax forms' },
+    { id: '5', text: 'Bike repair' },
+    { id: '6', text: 'Guitar chords' },
+  ];
+  const terms = candidateTerms(docs).map((c) => c.term);
+  assert.ok(terms.length > 0);
+  assert.ok(!terms.some((t) => t.includes(' ')));
 });

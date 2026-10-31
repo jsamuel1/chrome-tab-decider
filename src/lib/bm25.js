@@ -1,17 +1,19 @@
 const K1 = 1.2;
 const B = 0.75;
-const CJK = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/;
 // A single Han ideograph or Hangul syllable can be a word; a single kana is usually a particle such as "の".
 const SINGLE_OK = /^[\u3400-\u9fff\uac00-\ud7af]$/;
 
-// Runs of tokens that sat next to each other in the text, split wherever punctuation or a dropped token came between.
+// Runs of words separated only by spaces, split wherever punctuation or a dropped token came between.
+// Words that touch with no space (Japanese, Chinese) also start a new run: joining them with a space would invent a phrase.
 function runs(text, lang) {
   const seg = new Intl.Segmenter(lang || undefined, { granularity: 'word' });
   const out = [[]];
   const brk = () => { if (out.at(-1).length) out.push([]); };
+  let spaced = true;
   for (const { segment, isWordLike } of seg.segment(String(text ?? ''))) {
     if (!isWordLike) {
-      if (!/^\s+$/.test(segment)) brk();
+      if (/^\s+$/.test(segment)) spaced = true;
+      else brk();
       continue;
     }
     const t = segment.toLowerCase();
@@ -19,6 +21,8 @@ function runs(text, lang) {
       brk();
       continue;
     }
+    if (!spaced) brk();
+    spaced = false;
     out.at(-1).push(t);
   }
   return out.filter((r) => r.length);
@@ -68,13 +72,8 @@ export function candidateTerms(docs, { minDocs = 2, max = 12 } = {}) {
   };
   const docRuns = docs.map((d) => ({ id: d.id, runs: runs(d.text) }));
   for (const { id, runs: rs } of docRuns) for (const r of rs) for (const t of r) add(t, id);
-  // Japanese and Chinese are written without spaces, so joining their tokens with one would invent a phrase.
   for (const { id, runs: rs } of docRuns) {
-    for (const r of rs) {
-      for (let i = 0; i + 1 < r.length; i++) {
-        if (!CJK.test(r[i]) && !CJK.test(r[i + 1])) add(`${r[i]} ${r[i + 1]}`, id);
-      }
-    }
+    for (const r of rs) for (let i = 0; i + 1 < r.length; i++) add(`${r[i]} ${r[i + 1]}`, id);
   }
   const ok = (term) => {
     const c = sets.get(term)?.size ?? 0;

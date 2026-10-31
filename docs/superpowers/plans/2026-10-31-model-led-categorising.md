@@ -104,9 +104,9 @@
 - Test: `test/bm25.test.js`
 
 **Interfaces:**
-- Produces: `export function tokenize(text: string, lang?: string): string[]` — lower-cased word tokens from `Intl.Segmenter(lang, { granularity: 'word' })`, keeping only `isWordLike` segments, dropping tokens that are all digits or one character long (except CJK).
+- Produces: `export function tokenize(text: string, lang?: string): string[]` — lower-cased word tokens from `Intl.Segmenter(lang, { granularity: 'word' })`, keeping only `isWordLike` segments, dropping tokens that are all digits or one character long. A single Han ideograph or Hangul syllable is kept; a single kana (usually a particle such as "の") is dropped.
 - Produces: `export function index(docs: { id, text }[]): Index` and `export function score(idx: Index, query: string): { id, score }[]` sorted descending, standard Okapi BM25 with `k1 = 1.2`, `b = 0.75`.
-- Produces: `export function candidateTerms(docs: { id, text }[], { minDocs = 2, max = 12 } = {}): { term, docIds, score }[]` — unigrams and adjacent-word bigrams that appear in at least `minDocs` documents and in no more than half of them, scored by document frequency × IDF; a bigram replaces its unigrams when it covers the same documents. No stopword list: frequency across the user's own documents is the only filter.
+- Produces: `export function candidateTerms(docs: { id, text }[], { minDocs = 2, max = 12 } = {}): { term, docIds, score }[]` — unigrams and adjacent-word bigrams that appear in at least `minDocs` documents and in no more than half of them, scored by document frequency × IDF. A bigram is formed only from two words separated by plain spaces, so words with punctuation or a dropped token between them are never paired, and Japanese or Chinese words that touch with no space are never joined (Korean, which uses spaces, does form bigrams). A bigram replaces one of its words when it covers the same documents and its other word is also a candidate; when the other word is too common to be a candidate, both are kept, so "the acme" cannot hide "acme". No stopword list: frequency across the user's own documents is the only filter.
 
 - [ ] **Step 1: Write the failing tests** —
   - `tokenize('ESP32-S3 Technical Reference')` contains `esp32` and `technical`.
