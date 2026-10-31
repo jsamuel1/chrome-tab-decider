@@ -1,7 +1,7 @@
 // TabSage service worker: wires Chrome events to the organizer, sorter, persistence and archive.
 
 import { getSettings, setSettings, getState, updateState, flushState, DEFAULT_SETTINGS } from './lib/store.js';
-import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat, markActivity, saveWhy, noteTabClosed, noteUnpinned } from './lib/organizer.js';
+import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat, markActivity, saveWhy, noteTabClosed, noteUnpinned, notePinnedNavigated } from './lib/organizer.js';
 import { deleteReason as removeReason } from './lib/reasons.js';
 import { sortAll } from './lib/sorter.js';
 import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
@@ -134,6 +134,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   }
   if (startingUp) return;
   if (info.pinned === false) noteUnpinned(tab);
+  else if (info.url && tab.pinned) notePinnedNavigated(tab);
   if (info.status === 'complete' || info.url || info.title) {
     if (info.url) {
       markActivity();

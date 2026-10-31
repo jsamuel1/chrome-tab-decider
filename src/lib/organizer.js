@@ -11,7 +11,7 @@ import { groupTitle, isRename, nameFromTitle, planGroups } from './grouping.js';
 import { decisionOrder, decisionState, pageText, shortlist, shouldMove } from './decide.js';
 import { sortAll } from './sorter.js';
 import { applyReason, whyOptions } from './reasons.js';
-import { planPins, startCooldown } from './usage.js';
+import { carryUse, planPins, startCooldown } from './usage.js';
 
 // Tab group changes we caused (so they aren't mistaken for the user teaching us).
 export const expectedGroupChange = new Map(); // tabId -> groupId | '*'
@@ -315,6 +315,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   // --- 5. pinned tabs and the Daily group. The tabs are read again, as the classifier may have taken
   // a while and the user may have moved, closed or switched tabs.
   let live = await chrome.tabs.query({ windowType: 'normal' });
+  followPins(st, live, await pinTabs(), now);
   const looking = await lookingAtNow();
   const { daily, changed } = await applyPins(st, settings, live, eligible(live), looking, now);
   if (changed) live = await chrome.tabs.query({ windowType: 'normal' });
@@ -443,24 +444,72 @@ async function applyPins(st, settings, live, fresh, looking, now) {
   return { daily: new Set(plan.daily), changed };
 }
 
-// tabId -> page for the tabs we pinned, kept in session storage so a closed tab can be traced back to its page.
+// tabId -> page for the tabs we pinned, kept in session storage so a closed or navigated tab can be
+// traced back to its page. Session storage is emptied when the browser restarts.
+async function pinTabs() {
+  return (await chrome.storage.session?.get('ourPinTabs').catch(() => null))?.ourPinTabs || {};
+}
+
+const savePinTabs = (tabs) => chrome.storage.session?.set({ ourPinTabs: tabs }).catch(() => {});
+
 async function rememberPinTabs(st, live) {
   const tabs = {};
   for (const t of live) if (t.pinned && st.ourPins[keyOf(t)]) tabs[t.id] = keyOf(t);
-  await chrome.storage.session?.set({ ourPinTabs: tabs }).catch(() => {});
+  await savePinTabs(tabs);
+}
+
+// A tab we pinned that moved to another page (a link clicked in a pinned web app) is still our pin:
+// the pin follows the tab, and the new page keeps the old one's standing. Pages we pinned earlier this
+// session that no pinned tab holds any more are forgotten, so a later pin of yours there is yours.
+function followPins(st, live, pinned, now) {
+  for (const t of live) {
+    const from = pinned[t.id];
+    const to = keyOf(t);
+    if (!t.pinned || !from || from === to || !st.ourPins[from]) continue;
+    st.ourPins[to] = st.ourPins[from];
+    st.usage = carryUse(st.usage, from, to, now);
+  }
+  const held = new Set(live.filter((t) => t.pinned).map(keyOf));
+  for (const key of Object.values(pinned)) if (!held.has(key)) delete st.ourPins[key];
+}
+
+/** A pinned tab went to another page: if we had pinned it, the pin follows the tab. */
+export async function notePinnedNavigated(tab) {
+  const pinned = await pinTabs();
+  if (!pinned[tab.id]) return;
+  const live = await chrome.tabs.query({ windowType: 'normal' });
+  if (!live.some((t) => t.id === tab.id)) live.push(tab);
+  const now = Date.now();
+  const st = await updateState((st) => {
+    followPins(st, live.map((t) => (t.id === tab.id ? tab : t)), pinned, now);
+    return st;
+  });
+  const tabs = {};
+  for (const [id, key] of Object.entries(pinned)) if (Number(id) !== tab.id) tabs[id] = key;
+  if (st.ourPins[keyOf(tab)]) tabs[tab.id] = keyOf(tab);
+  await savePinTabs(tabs);
 }
 
 /** A tab was closed: if it held a page we pinned, that page stays unpinned for a while. */
 export async function noteTabClosed(tabId) {
-  const { ourPinTabs } = (await chrome.storage.session?.get('ourPinTabs').catch(() => null)) || {};
-  const key = ourPinTabs?.[tabId];
-  if (key) await dropPin(key);
+  const pinned = await pinTabs();
+  const key = pinned[tabId];
+  if (!key) return;
+  delete pinned[tabId];
+  await savePinTabs(pinned);
+  await dropPin(key);
 }
 
 /** A tab was unpinned: if we did not do it and we had pinned that page, it stays unpinned for a while. */
 export async function noteUnpinned(tab) {
   if (expectedUnpin.delete(tab.id)) return;
-  await dropPin(keyOf(tab));
+  const pinned = await pinTabs();
+  const key = pinned[tab.id] || keyOf(tab);
+  if (pinned[tab.id]) {
+    delete pinned[tab.id];
+    await savePinTabs(pinned);
+  }
+  await dropPin(key);
 }
 
 async function dropPin(key) {
@@ -498,7 +547,8 @@ export async function learnFromUser(tab, groupId) {
   const url = realUrl(tab);
   const d = hostOf(url);
   const catId = await catForGroup(groupId);
-  if (!catId || !d || catId === DAILY_ID) return;
+  if (!catId || !d) return;
+  // a page you put in Daily yourself stays there, outside the ranking (and is not asked why)
   const st = await updateState((st) => {
     st.pageMap[pageKey(url)] = { catId, confidence: 1, source: 'user', at: Date.now(), fixed: true };
     return st;

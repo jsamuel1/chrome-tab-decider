@@ -11,6 +11,12 @@ export function recordUse(usage, key, now, halfLifeDays = 7) {
   return { ...usage, [key]: { score: decayed(usage[key], now, halfLifeDays) + 1, at: now } };
 }
 
+/** A tab moved from page `from` to `to`: the new page keeps the old one's standing, if that is higher. */
+export function carryUse(usage, from, to, now, halfLifeDays = 7) {
+  if (!usage[from] || decayed(usage[from], now, halfLifeDays) <= decayed(usage[to], now, halfLifeDays)) return usage;
+  return { ...usage, [to]: { ...usage[from] } };
+}
+
 /** Forget pages whose score has faded to almost nothing. */
 export function pruneUsage(usage, now, halfLifeDays = 7, floor = 0.05) {
   return Object.fromEntries(Object.entries(usage).filter(([, e]) => decayed(e, now, halfLifeDays) >= floor));

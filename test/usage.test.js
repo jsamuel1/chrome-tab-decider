@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordUse, pruneUsage, planPins, startCooldown } from '../src/lib/usage.js';
+import { carryUse, recordUse, pruneUsage, planPins, startCooldown } from '../src/lib/usage.js';
 
 const DAY = 864e5;
 const now = Date.UTC(2026, 9, 31);
@@ -93,4 +93,12 @@ test('two tabs on one page count once', () => {
   const usage = uses('a', 5, now);
   const plan = planPins([page('a'), page('a', { tabId: 99 })], usage, { now, pinMax: 2, dailyMax: 0 });
   assert.deepEqual(plan.pin, ['a']);
+});
+
+test('carryUse gives the new page the old one\'s standing only when it is higher', () => {
+  const u = { ...uses('a', 10, now), ...uses('b', 2, now) };
+  assert.equal(carryUse(u, 'a', 'c', now).c.score, 10);
+  assert.equal(carryUse(u, 'a', 'b', now).b.score, 10);
+  assert.equal(carryUse(u, 'b', 'a', now), u);
+  assert.equal(carryUse(u, 'x', 'a', now), u);
 });

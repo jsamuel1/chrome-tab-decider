@@ -56,7 +56,7 @@ const { setAiForTest } = await import('../src/lib/ai.js');
 const { getState } = await import('../src/lib/store.js');
 const { recordUse } = await import('../src/lib/usage.js');
 const { sortAll } = await import('../src/lib/sorter.js');
-const { organize, noteTabClosed, noteUnpinned, groupCat } = await import('../src/lib/organizer.js');
+const { organize, noteTabClosed, noteUnpinned, notePinnedNavigated, learnFromUser, groupCat } = await import('../src/lib/organizer.js');
 
 setAiForTest(async (type, payload) => {
   if (type === 'decider.status') return { downloaded: ready, device: 'webgpu' };
@@ -82,6 +82,7 @@ const reset = async (tabList, uses = {}) => {
   groupCat.clear();
   ready = true;
   tabs = tabList;
+  delete session.ourPinTabs;
   return st;
 };
 
@@ -167,4 +168,69 @@ test('the Daily group sorts first and is never collapsed', async () => {
   assert.deepEqual(moved[0], [12, 1], 'Daily was not moved to just after the pinned tabs');
   assert.ok(!collapsedCalls.some(([gid, collapsed]) => gid === 12 && collapsed), 'Daily was collapsed');
   assert.ok(collapsedCalls.some(([gid, collapsed]) => gid === 12 && !collapsed === true), 'a collapsed Daily was not opened');
+});
+
+const withSettings = async (patch, fn) => {
+  store.settings = { ...(await chrome.storage.local.get('settings')).settings, ...patch };
+  try { await fn(); } finally { delete store.settings; }
+};
+
+test('a pin we made follows its tab to a new page, and a later pin of yours on the old page stays yours', async () => {
+  const st = await reset([tab(1), tab(2), tab(3)], { 1: 50, 2: 1, 3: 1 });
+  await withSettings({ pinnedMax: 1, dailyMax: 0 }, async () => {
+    await organize({ reason: 'test' });
+    assert.deepEqual(tabs.filter((t) => t.pinned).map((t) => t.id), [1]);
+
+    tabs[0].url = 'https://site1.example.com/inbox/42'; // a link followed inside the pinned tab
+    await organize({ reason: 'test' });
+    assert.deepEqual(Object.keys(st.ourPins), ['https://site1.example.com/inbox/42']);
+    assert.deepEqual(session.ourPinTabs, { 1: 'https://site1.example.com/inbox/42' });
+    assert.ok(tabs[0].pinned, 'the moved tab keeps its standing and is not unpinned at once');
+
+    tabs.push(tab(4, { pinned: true })); // you pin the old page yourself
+    for (let i = 0; i < 200; i++) st.usage = recordUse(st.usage, url(2), Date.now());
+    updated.length = 0;
+    await organize({ reason: 'test' });
+    assert.ok(!tabs[0].pinned, 'our pin, now on a new page, can still be unpinned');
+    assert.ok(tabs.find((t) => t.id === 4).pinned);
+    assert.ok(!updated.some(([id, o]) => id === 4 && o.pinned === false), 'your own pin was unpinned');
+    assert.deepEqual(st.ourPins, {});
+  });
+});
+
+test('a pin we made that moved page and is then closed or unpinned still starts the cooldown', async () => {
+  const st = await reset([tab(1), tab(2)], { 1: 50, 2: 40 });
+  await organize({ reason: 'test' });
+  assert.ok(tabs.every((t) => t.pinned));
+
+  const moved1 = 'https://site1.example.com/inbox/42';
+  tabs[0].url = moved1;
+  await notePinnedNavigated(structuredClone(tabs[0])); // before any organize run
+  assert.ok(st.ourPins[moved1]);
+  assert.equal(st.ourPins[url(1)], undefined);
+  await noteTabClosed(1);
+  assert.ok(st.pinCooldown[moved1] > Date.now() + 2 * DAY);
+  assert.equal(st.ourPins[moved1], undefined);
+
+  tabs[1].url = 'https://site2.example.com/later';
+  await notePinnedNavigated(structuredClone(tabs[1]));
+  await noteUnpinned({ ...tabs[1], pinned: false });
+  assert.ok(st.pinCooldown['https://site2.example.com/later'] > Date.now() + 2 * DAY);
+  assert.deepEqual(st.ourPins, {});
+});
+
+test('a tab you put in Daily yourself stays there', async () => {
+  const st = await reset([tab(1), tab(2), tab(3), tab(4)], { 1: 50, 2: 20, 4: 10 });
+  await withSettings({ pinnedMax: 0, dailyMax: 2 }, async () => {
+    await organize({ reason: 'test' });
+    const dgid = [...groupCat.entries()].find(([, c]) => c === 'daily')[0];
+    assert.deepEqual(tabs.filter((t) => t.groupId === dgid).map((t) => t.id), [1, 2]);
+
+    tabs[2].groupId = dgid; // "Add tab to group > Daily" on a tab never used, into a full Daily
+    await learnFromUser(structuredClone(tabs[2]), dgid);
+    await organize({ reason: 'test' });
+    assert.equal(tabs[2].groupId, dgid, 'your tab was moved out of Daily');
+    assert.deepEqual(tabs.filter((t) => t.groupId === dgid).map((t) => t.id), [1, 2, 3], 'your tab pushed one out of Daily');
+    assert.equal(st.pageMap[url(3)].source, 'user');
+  });
 });
