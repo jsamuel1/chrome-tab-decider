@@ -12,7 +12,7 @@ import { modelError } from './engine/models.js';
 import { hostOf, isGroupable, realUrl, pageKey } from './lib/urls.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
 import { isRename, nameFromTitle } from './lib/grouping.js';
-import { detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
+import { detailsCount, detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
 import { recordUse, pruneUsage } from './lib/usage.js';
 import { bookmarkFolders } from './lib/bookmarks.js';
 import { onboardingSuggestions, saveProfile } from './lib/onboarding.js';
@@ -297,6 +297,10 @@ const api = {
       return before !== JSON.stringify(details);
     });
     if (changed) scheduleOrganize('page-details');
+  },
+  // How many open tabs have stored details, never the details themselves (exportData leaves them out).
+  async pageDetailsCount() {
+    return detailsCount(await getState(), await chrome.tabs.query({ windowType: 'normal' }));
   },
   getSettings: () => getSettings(),
   async setSettings({ patch }) {

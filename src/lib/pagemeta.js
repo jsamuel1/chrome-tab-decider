@@ -28,3 +28,8 @@ export function pruneTabMeta(st, tabs) {
   }
   return removed;
 }
+
+/** How many open tracked tabs have stored page details (a count only, for the smoke test). */
+export function detailsCount(st, tabs) {
+  return tabs.filter((t) => tracked(t) && st.tabMeta?.[pageKey(realUrl(t))]?.details).length;
+}

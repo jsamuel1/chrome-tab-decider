@@ -11,7 +11,7 @@ globalThis.chrome = {
   tabs: { query: async () => openTabs, remove: async (ids) => removed.push(...ids) },
 };
 
-const { detailsKey, pruneTabMeta } = await import('../src/lib/pagemeta.js');
+const { detailsCount, detailsKey, pruneTabMeta } = await import('../src/lib/pagemeta.js');
 const { migrate, getState } = await import('../src/lib/store.js');
 const { runArchive } = await import('../src/lib/archive.js');
 
@@ -73,4 +73,21 @@ test('archiving a tab removes its one tabMeta entry, details included', async ()
   assert.deepEqual(closed, ['https://app.example/#/board']);
   assert.deepEqual(removed, [7]);
   assert.deepEqual(st.tabMeta, {});
+});
+
+test('detailsCount counts the open organised tabs whose page has stored details', () => {
+  const st = { tabMeta: {
+    'https://a.com/': { details: { title: 'A' } },
+    'https://b.com/': { lastAccessed: 1 },
+    'https://c.com/': { details: { title: 'C' } },
+  } };
+  const tabs = [
+    tab('https://a.com/#x'),
+    tab('https://b.com/'),
+    tab('https://c.com/', { incognito: true }),
+    tab('chrome://version/'),
+    tab('https://gone.com/'),
+  ];
+  assert.equal(detailsCount(st, tabs), 1);
+  assert.equal(detailsCount({}, tabs), 0);
 });

@@ -2,15 +2,17 @@
 
 A Chrome extension (Manifest V3) that keeps your tabs organized in **native Chrome tab groups**:
 
-- **Same domain → same group**, always. One classification decision per domain, remembered.
-- **Top categories, discovered from your titles.** A single pass over all tab titles with Chrome's built-in LLM (Prompt API / Gemini Nano, JSON-schema constrained) proposes folder names. Falls back to keyword extraction when the LLM isn't available.
-- **Strands Decider on WebGPU as the classifier.** Each domain cluster is filed into one of the discovered folders with a `choice` question to [Strands Decider](https://github.com/strands-labs/strands-decider) running locally via ONNX Runtime Web (WebGPU). Low-confidence answers go to **Other**. Only the top *N* categories get groups; the rest fold into Other. When Other grows, new folders are discovered incrementally.
+- **Nothing moves until the classifier is here.** Until Strands Decider has downloaded, TabSage does not move, group, pin or name any tab. Onboarding opens on first install while it downloads, and asks about your company, your work, your projects and the categories you want.
+- **Each tab is decided on its own page.** A content script reads a short, fixed set of details from each page (title, meta description, `og:site_name`, `og:title`, first `h1`, language; each capped at 200 characters; never body text, form fields or typed input). [Strands Decider](https://github.com/strands-labs/strands-decider), running locally through ONNX Runtime Web (WebGPU), chooses each page's folder from a short list, given those details, your profile, any bookmark hint and your saved reasons. Low-confidence answers go to **Other**.
+- **Folders come from you and your own tabs.** Your onboarding answers, groups you name, your bookmark folders, and terms that BM25 finds shared by several of your tabs but rare across the rest; the classifier checks each candidate before it becomes a folder. Chrome's built-in model may propose names too, when it is available. No fixed keyword or site list decides anything.
+- **Work and personal, flat.** Work folders are titled `<Company> · <Folder>`, work tabs that fit no project go in a plain `<Company>` group, and personal folders have plain names. Only the top *N* folders get groups; the rest fold into their parent.
+- **Your most-used tabs stay in reach.** The pages you switch to most become pinned tabs, and the next tier goes in a **Daily** group that is always first. Pages move in and out slowly, and your own pins are never touched.
+- **Learns from you.** Drag a tab to another group and a small "Why?" card asks why, with one-click answers; the move is final for that page (or the whole site, if you say so) and the reason guides later decisions. Rename a group and the folder is renamed; name a group you made yourself and it becomes a folder.
 - **Dynamic, configurable sorting.** Default: groups by most-recent use, tabs MRU with same-domain tabs kept together. Also by size, A–Z or manual. **Pinned groups always first**, Other always last.
 - **Trims ad-hoc tabs.** Tabs not revisited in *X* days (default 7) are closed but stay **searchable** from the toolbar popup and reopen into their group. Pinned tabs, pinned groups, audible tabs and the active tab are never trimmed.
 - **Persists and restores without reloading.** The layout is snapshotted continuously. On browser start, tabs Chrome already restored are regrouped in place; missing tabs come back as lightweight placeholders that show the saved title/favicon and only load when you open them.
-- **Learns from you.** Drag a tab to another group and its whole domain follows; rename a group and the folder is renamed; name a group you made yourself and it becomes a folder.
 
-Everything runs on-device — no tab data leaves the browser. The only network traffic is the one-time model download from Hugging Face.
+Everything runs on-device. Page details, bookmarks, usage, your profile and your reasons are kept in the browser's local extension storage and never leave the browser. The only network traffic is the one-time model download from Hugging Face. See [PRIVACY.md](PRIVACY.md), and [docs/store-listing.md](docs/store-listing.md) for the Chrome Web Store answers.
 
 ## Install
 
@@ -23,7 +25,7 @@ npm ci --ignore-scripts
 npm run build        # → dist/
 ```
 
-On first install the settings page opens and the classifier (≈1.1 GB) downloads from Hugging Face into the browser cache in the background; it is re-used on every later start. Click **Run self-test** to check tokenization and probabilities against the torch reference published with the model. Until the model is there, the built-in LLM or keyword matching is used.
+On first install onboarding opens and the classifier (≈1.1 GB) downloads from Hugging Face into the browser cache in the background; it is re-used on every later start. Click **Run self-test** in Settings to check tokenization and probabilities against the torch reference published with the model. Until the model is there, TabSage leaves your tabs where they are.
 
 Shortcuts: `Alt+Shift+T` opens search, `Alt+Shift+O` organizes now.
 
@@ -52,16 +54,17 @@ Other choices in Settings: All entries share the fused-graph contract
 
 ## How classification works
 
-1. **Cluster** tabs by hostname (or registrable domain — setting).
-2. **Discover** folders once over all titles (`LanguageModel.prompt` with a JSON schema), alongside the folders from your onboarding profile. Existing folder names are passed back in so they stay stable.
-3. **Decide** for each *new* domain: state = site + its tab titles; question = `choice` over the folders + Other. The prompt is a byte-exact port of `strands_decider/prompting.py`; the option pointer positions are recovered from byte-level BPE token boundaries (`src/engine/tokens.js`) and verified by the self-test.
-4. **Apply**: top *N* categories get groups per window; everything else goes to Other. Then sort.
+1. **Read** each page's details through the content script (`src/content/`), kept per page only while it is open.
+2. **Find folders** from your profile, your named groups, your bookmark folders and BM25 terms over your open tabs (`src/lib/bm25.js`); each new name is checked with a yes/no question to the classifier, and Chrome's built-in model (`LanguageModel.prompt` with a JSON schema) may add candidates.
+3. **Decide** each new or changed page: BM25 picks a short list of folders, then a `choice` question over that list plus Other, with the page details, profile, bookmark hint and relevant reasons as state (`src/lib/decide.js`). The prompt is a byte-exact port of `strands_decider/prompting.py`; the option pointer positions are recovered from byte-level BPE token boundaries (`src/engine/tokens.js`) and verified by the self-test.
+4. **Apply**: top *N* folders get groups per window, the rest fold into their parent; your most-used pages are pinned or put in Daily; then sort. Filed tabs are only re-decided at a quiet moment, and never while you are looking at them.
 
 ## Layout
 
 ```
 src/background.js          service worker: events, alarms, messaging
-src/lib/organizer.js       clusters → categories → tab groups; learns from user moves
+src/lib/organizer.js       pages → folders → tab groups; pins; learns from user moves
+src/content/               page details and the "Why?" card
 src/lib/sorter.js          group/tab ordering (pinned first, MRU/count/alpha/manual)
 src/lib/persist.js         snapshot + lazy restore on startup
 src/lib/archive.js         trim stale tabs, search, reopen
@@ -81,8 +84,9 @@ static/                    manifest, popup, options, lazy placeholder
 ## Tests
 
 ```bash
-npm test                                   # prompt rendering vs upstream fixtures, URL helpers
-NODE_PATH=$(npm root -g) node test/e2e/run.mjs   # loads dist/ in Chromium (Playwright), organizes test tabs
+npm test                                   # unit tests (node --test)
+npm install --no-save --ignore-scripts playwright@1 && npx playwright install chromium   # once, for the E2E
+node test/e2e/run.mjs                      # loads dist/ in Chromium (Playwright) with no classifier: nothing grouped, page details stored, onboarding opens
 ```
 
 ## Requirements

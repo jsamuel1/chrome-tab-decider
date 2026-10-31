@@ -44,12 +44,14 @@ jobs:
           fi
           npm run build
 
-      - name: E2E (Chromium loads the extension and organizes tabs)
+      - name: E2E (Chromium loads the extension with no classifier)
         run: |
           npm install --no-save --ignore-scripts playwright@1
           npx playwright install --with-deps chromium
           node test/e2e/run.mjs | tee e2e.log
-          grep -q "OK same-domain tabs share a group" e2e.log
+          grep -q "OK no tabs grouped before the classifier is ready" e2e.log
+          grep -q "OK page details stored for open tabs" e2e.log
+          grep -q "OK onboarding opened on install" e2e.log
           grep -q "no console errors" e2e.log
 
       - name: Package
