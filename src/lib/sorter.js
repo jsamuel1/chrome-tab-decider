@@ -3,6 +3,7 @@
 import { getSettings, getState } from './store.js';
 import { domainKey, realTitle, realUrl } from './urls.js';
 import { catForGroup } from './organizer.js';
+import { classifierReady } from './ai.js';
 
 const lastUsed = (st, t) => Math.max(st.tabMeta[realUrl(t)]?.lastAccessed || 0, t.lastAccessed || 0);
 
@@ -31,6 +32,7 @@ export async function sortAll() {
   sorting = true;
   try {
     const settings = await getSettings();
+    if (!(await classifierReady(settings))) return;
     const st = await getState();
     const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
     for (const w of windows) await sortWindow(w.id, settings, st);

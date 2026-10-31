@@ -3,7 +3,7 @@
 import { getSettings, getState, updateState } from './store.js';
 import { domainKey, isGroupable, realTitle, realUrl } from './urls.js';
 import { OTHER_ID, ensureOther, findByName, mergeCategories, seedList } from './categories.js';
-import { ai } from './ai.js';
+import { ai, classifierReady } from './ai.js';
 import { sortAll } from './sorter.js';
 
 // Tab group changes we caused (so they aren't mistaken for the user teaching us).
@@ -14,6 +14,7 @@ export const manualTabs = new Set();
 export const groupCat = new Map();
 
 let chain = Promise.resolve();
+export { classifierReady };
 export let lastEngine = '';
 
 /** Serialize organize runs. */
@@ -86,16 +87,6 @@ async function assign(st, settings, cluster, cats) {
     console.warn('[TabSage] decider failed', e);
   }
   return null;
-}
-
-/** True only once the classifier is downloaded; with no model TabSage leaves every tab alone. */
-export async function classifierReady(settings) {
-  try {
-    const r = await ai('decider.status', { settings }, 15000);
-    return !!r?.downloaded;
-  } catch {
-    return false;
-  }
 }
 
 /** Adopt user-created, named groups as categories (and teach their domains). */

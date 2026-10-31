@@ -15,11 +15,12 @@ globalThis.chrome = {
     move: record('tabs.move'),
   },
   tabGroups: { query: async () => [], update: record('tabGroups.update'), move: record('tabGroups.move') },
-  windows: { getAll: async () => [] },
+  windows: { getAll: async () => { calls.push(['windows.getAll']); return [{ id: 1 }]; } },
 };
 
 const { organize, classifierReady } = await import('../src/lib/organizer.js');
 const { setAiForTest } = await import('../src/lib/ai.js');
+const { sortAll } = await import('../src/lib/sorter.js');
 
 test('organize does nothing while the classifier is not downloaded', async () => {
   const asked = [];
@@ -39,4 +40,11 @@ test('classifierReady is true once downloaded, and false if the engine cannot be
   assert.equal(await classifierReady({}), true);
   setAiForTest(async () => { throw new Error('offscreen gone'); });
   assert.equal(await classifierReady({}), false);
+});
+
+test('sortAll does not reorder or collapse anything while the classifier is not downloaded', async () => {
+  setAiForTest(async () => ({ downloaded: false }));
+  calls.length = 0;
+  await sortAll();
+  assert.deepEqual(calls, []);
 });

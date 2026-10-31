@@ -63,3 +63,13 @@ export function ai(type, payload, timeoutMs) {
 export function setAiForTest(fn) {
   impl = fn || realAi;
 }
+
+/** True only once the classifier is downloaded; with no model TabSage leaves every tab alone. */
+export async function classifierReady(settings) {
+  try {
+    const r = await ai('decider.status', { settings }, 15000);
+    return !!r?.downloaded;
+  } catch {
+    return false;
+  }
+}
