@@ -3,6 +3,7 @@
 import { uid } from './store.js';
 
 export const OTHER_ID = 'other';
+export const DAILY_ID = 'daily';
 export const COLORS = ['blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'];
 
 export function ensureOther(st, settings) {
@@ -27,7 +28,7 @@ function pickColor(st) {
   return [...used.entries()].sort((a, b) => a[1] - b[1])[0][0];
 }
 
-/** Add categories by name; existing names are kept (description refreshed). Returns the category objects. */
+/** Add categories by name; existing names are kept (description, kind and parent refreshed). Returns the category objects. */
 export function mergeCategories(st, list, source) {
   const out = [];
   for (const c of list) {
@@ -37,10 +38,13 @@ export function mergeCategories(st, list, source) {
       cat = st.categories[id] = {
         id, name: c.name, description: c.description || '', color: c.color || pickColor(st),
         pinned: false, lastActive: 0, createdAt: Date.now(), source,
+        kind: c.kind || 'personal', parentId: c.parentId || null, isNew: !!c.isNew,
       };
     } else if (c.description && cat.source !== 'user') {
       cat.description = c.description;
     }
+    if (cat && c.kind !== undefined) cat.kind = c.kind;
+    if (cat && c.parentId !== undefined) cat.parentId = c.parentId;
     out.push(cat);
   }
   return out;
