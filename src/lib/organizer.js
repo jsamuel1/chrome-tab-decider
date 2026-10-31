@@ -1,6 +1,6 @@
 // The organizer: each open page → one folder → flat Chrome tab groups.
 
-import { getSettings, getState, setSiteRule, updateState } from './store.js';
+import { getSettings, getState, updateState } from './store.js';
 import { hostOf, isGroupable, pageKey, realUrl } from './urls.js';
 import { DAILY_ID, OTHER_ID, ensureOther, findByName, mergeCategories } from './categories.js';
 import { ai, classifierReady, deciderStatus } from './ai.js';
@@ -10,6 +10,7 @@ import { bookmarkFolders, bookmarkHint } from './bookmarks.js';
 import { groupTitle, isRename, nameFromTitle, planGroups } from './grouping.js';
 import { decisionOrder, decisionState, pageText, shortlist, shouldMove } from './decide.js';
 import { sortAll } from './sorter.js';
+import { applyReason, whyOptions } from './reasons.js';
 
 // Tab group changes we caused (so they aren't mistaken for the user teaching us).
 export const expectedGroupChange = new Map(); // tabId -> groupId | '*'
@@ -396,7 +397,7 @@ export async function catForGroup(groupId) {
   return null;
 }
 
-/** The user moved a tab into one of our groups: that page stays there, and so does the rest of its site. */
+/** The user moved a tab into one of our groups: that page stays there, and the tab asks why. */
 export async function learnFromUser(tab, groupId) {
   if (groupId === -1) {
     manualTabs.add(tab.id);
@@ -407,9 +408,58 @@ export async function learnFromUser(tab, groupId) {
   const d = hostOf(url);
   const catId = await catForGroup(groupId);
   if (!catId || !d) return;
-  await updateState((st) => {
-    setSiteRule(st, d, catId);
+  const st = await updateState((st) => {
     st.pageMap[pageKey(url)] = { catId, confidence: 1, source: 'user', at: Date.now(), fixed: true };
+    return st;
   });
+  if (tab.active && !tab.incognito) await askWhy(tab, st.categories[catId], st.profile, d);
   organize({ reason: 'user-move' });
+}
+
+const WHY_MS = 10 * 60 * 1000; // an answer that comes later than this is not taken
+// tabId -> the question its "Why?" card is showing. Kept in session storage too, as the service
+// worker may restart while the user types an answer.
+const whyAsked = new Map();
+
+// Show the "Why?" card in the tab, injected only now. The answers stay here; the card only learns
+// their labels and sends back the id of the one chosen.
+async function askWhy(tab, cat, profile, host) {
+  if (!cat || cat.id === DAILY_ID) return;
+  const options = whyOptions(cat, profile, host);
+  const ask = { url: pageKey(realUrl(tab)), catId: cat.id, options, at: Date.now() };
+  whyAsked.set(tab.id, ask);
+  await chrome.storage.session?.set({ [`why${tab.id}`]: ask }).catch(() => {});
+  try {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['why.js'] });
+    await chrome.tabs.sendMessage(tab.id, {
+      target: 'why',
+      question: `Why does this belong in ${groupTitle(cat, profile)}?`,
+      options: options.map(({ id, label }) => ({ id, label })),
+    });
+  } catch {} // pages the extension may not script (the Web Store, chrome:// pages)
+}
+
+async function takeWhy(tabId) {
+  const k = `why${tabId}`;
+  let ask = whyAsked.get(tabId);
+  if (!ask) ask = (await chrome.storage.session?.get(k).catch(() => null))?.[k];
+  whyAsked.delete(tabId);
+  await chrome.storage.session?.remove(k).catch(() => {});
+  return ask && Date.now() - ask.at < WHY_MS ? ask : null;
+}
+
+/** The answer from a tab's "Why?" card. Only the question that tab was asked, for the page it is still on, counts. */
+export async function saveWhy(tab, { optionId, text } = {}) {
+  const ask = await takeWhy(tab.id);
+  if (!ask || pageKey(realUrl(tab)) !== ask.url) return false;
+  const opt = ask.options.find((o) => o.id === optionId);
+  const typed = typeof text === 'string' ? text.trim() : '';
+  if (!opt && !typed) return false;
+  const saved = await updateState((st) => {
+    if (!st.categories[ask.catId]) return false;
+    applyReason(st, { url: ask.url, catId: ask.catId, optionId: opt?.id || 'text', text: typed || opt.text, scope: opt?.scope || 'page' });
+    return true;
+  }, { immediate: true });
+  if (saved) organize({ reason: 'why' });
+  return saved;
 }

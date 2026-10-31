@@ -88,7 +88,7 @@ test('a correction made by hand survives a restart, and so do the classifier dec
   await learnFromUser(tabs[0], 200);
   await organize({ reason: 'after-move' });
   const saved = migrate(structuredClone(store.state)); // what getState builds after a restart
-  assert.equal(saved.siteRules['a.com'].catId, 'c2');
+  assert.equal(saved.siteRules['a.com'].catId, 'c1', 'a move by hand bound the whole site');
   assert.equal(saved.pageMap['https://a.com/x'].catId, 'c2');
   assert.equal(saved.pageMap['https://a.com/x'].fixed, true);
   assert.equal(saved.pageMap['https://b.com/y']?.source, 'decider', 'the classifier decisions were thrown away on restart');

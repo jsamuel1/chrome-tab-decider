@@ -46,7 +46,7 @@ const opts = {
 // Content scripts cannot be ES modules, so they are bundled as classic scripts (IIFE).
 const contentOpts = {
   ...opts,
-  entryPoints: { content: 'src/content/details.js' },
+  entryPoints: { content: 'src/content/details.js', why: 'src/content/why.js' },
   format: 'iife',
 };
 

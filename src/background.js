@@ -1,7 +1,8 @@
 // TabSage service worker: wires Chrome events to the organizer, sorter, persistence and archive.
 
 import { getSettings, setSettings, getState, updateState, flushState, DEFAULT_SETTINGS } from './lib/store.js';
-import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat, markActivity } from './lib/organizer.js';
+import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat, markActivity, saveWhy } from './lib/organizer.js';
+import { deleteReason as removeReason } from './lib/reasons.js';
 import { sortAll } from './lib/sorter.js';
 import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
 import { runArchive, search, reopenArchived, deleteArchived } from './lib/archive.js';
@@ -248,6 +249,15 @@ const api = {
       st.reasons = st.reasons.filter((r) => !(r.scope === 'site' && r.host === domain));
     }, { immediate: true });
     await organize({ reason: 'forget-domain' });
+  },
+  // From the "Why?" card: only the page's own top frame, answering the question its tab was asked.
+  async saveReason({ optionId, text }, sender) {
+    if (sender?.id !== chrome.runtime.id || !sender.tab || sender.frameId !== 0) return false;
+    return saveWhy(sender.tab, { optionId, text });
+  },
+  async deleteReason({ id }) {
+    await updateState((st) => { removeReason(st, id); }, { immediate: true });
+    await organize({ reason: 'delete-reason' });
   },
   async pageDetails({ url, details }, sender) {
     if (!details || sender?.tab?.incognito) return;
