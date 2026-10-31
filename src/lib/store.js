@@ -32,7 +32,7 @@ export const DEFAULT_SETTINGS = {
 
 const DEFAULT_STATE = {
   categories: {},   // id -> { id, name, description, color, pinned, lastActive, createdAt, source, kind, parentId, isNew }
-  pageMap: {},      // pageKey -> { catId, confidence, source: 'decider'|'user', at, fixed }
+  pageMap: {},      // pageKey -> { catId, confidence, source: 'decider'|'user'|'site', at, fixed, sig }
   siteRules: {},    // host -> { catId, reasonId }
   reasons: [],      // [{ id, catId, text, scope: 'page'|'site', host, url, at }]
   usage: {},        // pageKey -> { score, at }
@@ -96,8 +96,7 @@ export function migrate(st) {
       delete st.tabMeta[k];
     }
   }
-  // Only state from before the page-based model has a domainMap to carry over. The interim organizer
-  // keeps a fresh domainMap of its own afterwards, which must survive service-worker restarts.
+  // Only state from before the page-based model has a domainMap: its hand-made corrections become site rules.
   if ((st.schemaVersion || 1) < SCHEMA_VERSION) {
     if (st.domainMap) {
       for (const [host, m] of Object.entries(st.domainMap)) {

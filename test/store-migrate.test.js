@@ -62,10 +62,10 @@ test('a newer hand-made correction replaces an older site rule for the same host
   assert.equal('domainMap' in st, false);
 });
 
-test('once migrated, the organizer\'s own domainMap survives a reload', () => {
+test('once migrated, the organizer\'s page decisions survive a reload', () => {
   const once = migrate(old());
-  once.domainMap = { 'x.com': { catId: 'c2', source: 'decider', at: 5 } };
+  once.pageMap = { 'https://x.com/a': { catId: 'c2', source: 'decider', at: 5 } };
   const reloaded = migrate(structuredClone(once));
-  assert.deepEqual(reloaded.domainMap, once.domainMap);
+  assert.deepEqual(reloaded.pageMap, once.pageMap);
   assert.deepEqual(reloaded.siteRules, once.siteRules);
 });

@@ -64,12 +64,16 @@ export function setAiForTest(fn) {
   impl = fn || realAi;
 }
 
-/** True only once the classifier is downloaded; with no model TabSage leaves every tab alone. */
-export async function classifierReady(settings) {
+/** The classifier's status, or null when the engine cannot be reached. */
+export async function deciderStatus(settings) {
   try {
-    const r = await ai('decider.status', { settings }, 15000);
-    return !!r?.downloaded;
+    return (await ai('decider.status', { settings }, 15000)) || null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** True only once the classifier is downloaded; with no model TabSage leaves every tab alone. */
+export async function classifierReady(settings, status) {
+  return !!(status === undefined ? await deciderStatus(settings) : status)?.downloaded;
 }

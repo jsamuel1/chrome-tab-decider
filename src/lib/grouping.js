@@ -9,6 +9,13 @@ export function groupTitle(cat, profile) {
   return cat.name;
 }
 
+/** The folder name a group title stands for, so a renamed work group keeps its company prefix out of the name. */
+export function nameFromTitle(cat, title, profile) {
+  const company = String(profile?.company || '').trim();
+  const prefix = cat.kind === 'work' && company ? `${company} · ` : '';
+  return prefix && title.startsWith(prefix) ? title.slice(prefix.length) : title;
+}
+
 // True when key a sorts before key b, comparing element by element.
 function before(a, b) {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i];

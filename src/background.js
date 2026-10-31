@@ -1,14 +1,15 @@
 // TabSage service worker: wires Chrome events to the organizer, sorter, persistence and archive.
 
 import { getSettings, setSettings, getState, updateState, flushState, DEFAULT_SETTINGS } from './lib/store.js';
-import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat } from './lib/organizer.js';
+import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat, markActivity } from './lib/organizer.js';
 import { sortAll } from './lib/sorter.js';
 import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
 import { runArchive, search, reopenArchived, deleteArchived } from './lib/archive.js';
 import { ai, closeOffscreen, ensureOffscreen, unloadIfIdle } from './lib/ai.js';
 import { modelError } from './engine/models.js';
-import { realUrl, pageKey } from './lib/urls.js';
+import { hostOf, realUrl, pageKey } from './lib/urls.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
+import { groupTitle, nameFromTitle } from './lib/grouping.js';
 import { detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
 
 // ---------- debouncers
@@ -60,7 +61,7 @@ async function prefetchModel(why) {
     const r = await ai('decider.prefetch', { settings }, 2 * 60 * 60 * 1000);
     if (!r.cached) {
       console.info(`[TabSage] model downloaded (${why})`);
-      organize({ reason: 'model-downloaded', reassign: 'heuristic' });
+      organize({ reason: 'model-downloaded' });
     }
   } catch (e) {
     console.warn('[TabSage] model download skipped:', e.message);
@@ -96,6 +97,8 @@ chrome.alarms.onAlarm.addListener(async (a) => {
     if (closed.length) console.info(`[TabSage] archived ${closed.length} tabs`);
   } else if (a.name === 'snapshot') {
     if (!startingUp) snapshot();
+  } else if (a.name === 'organize-quiet' || a.name === 'organize-more') {
+    organize({ reason: a.name });
   } else if (a.name === 'idle') {
     const s = await getSettings();
     unloadIfIdle(s.idleUnloadMin).catch(() => {});
@@ -109,6 +112,7 @@ chrome.commands.onCommand.addListener((cmd) => {
 // ---------- tab events
 chrome.tabs.onCreated.addListener(() => {
   if (startingUp) return;
+  markActivity();
   scheduleSnapshot();
 });
 
@@ -118,6 +122,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     if (exp !== undefined) {
       expectedGroupChange.delete(tabId);
     } else if (!startingUp) {
+      markActivity();
       learnFromUser(tab, info.groupId);
     }
     scheduleSnapshot();
@@ -125,6 +130,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (startingUp) return;
   if (info.status === 'complete' || info.url || info.title) {
     if (info.url) {
+      markActivity();
       manualTabs.delete(tabId); // navigated somewhere new: eligible again
       scheduleTidy();
     }
@@ -134,6 +140,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
 });
 
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  markActivity();
   try {
     const tab = await chrome.tabs.get(tabId);
     if (tab.incognito) return;
@@ -150,6 +157,7 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 
 chrome.tabs.onRemoved.addListener((tabId, { isWindowClosing }) => {
   manualTabs.delete(tabId);
+  markActivity();
   if (isWindowClosing) return; // window/browser closing: keep the snapshot as-is for restore
   scheduleSnapshot();
   scheduleTidy();
@@ -165,7 +173,7 @@ chrome.tabGroups.onUpdated.addListener(async (g) => {
     await updateState((st) => {
       const c = st.categories[catId];
       if (!c) return;
-      if (g.title && g.title !== c.name && catId !== OTHER_ID) c.name = g.title;
+      if (g.title && g.title !== groupTitle(c, st.profile) && catId !== OTHER_ID) c.name = nameFromTitle(c, g.title, st.profile);
       if (g.color && g.color !== c.color) c.color = g.color;
     });
   } else if (g.title) {
@@ -193,7 +201,7 @@ const api = {
       const gids = [];
       for (const g of groups) if ((await catForGroup(g.id)) === c.id) gids.push(g.id);
       const n = tabs.filter((t) => gids.includes(t.groupId)).length;
-      const domains = [...new Set([st.siteRules, st.domainMap || {}].flatMap((map) => Object.entries(map).filter(([, m]) => m.catId === c.id).map(([d]) => d)))];
+      const domains = Object.entries(st.siteRules).filter(([, r]) => r.catId === c.id).map(([d]) => d);
       cats.push({ ...c, tabCount: n, groupIds: gids, domains });
     }
     cats.sort((a, b) => (b.pinned - a.pinned) || (b.tabCount - a.tabCount));
@@ -223,7 +231,7 @@ const api = {
     if (catId === OTHER_ID) return;
     await updateState((st) => {
       delete st.categories[catId];
-      for (const [d, m] of Object.entries(st.domainMap || {})) if (m.catId === catId) delete st.domainMap[d];
+      for (const [k, m] of Object.entries(st.pageMap)) if (m.catId === catId) delete st.pageMap[k];
       for (const [h, r] of Object.entries(st.siteRules)) if (r.catId === catId) delete st.siteRules[h];
       st.reasons = st.reasons.filter((r) => r.catId !== catId);
     }, { immediate: true });
@@ -231,12 +239,12 @@ const api = {
   },
   async addCategory({ name, description }) {
     await updateState((st) => { mergeCategories(st, [{ name, description }], 'user'); }, { immediate: true });
-    await organize({ reason: 'add-category', reassign: 'heuristic' });
+    await organize({ reason: 'add-category' });
   },
   async forgetDomain({ domain }) {
     await updateState((st) => {
-      delete st.domainMap?.[domain];
       delete st.siteRules[domain];
+      for (const [k, m] of Object.entries(st.pageMap)) if (m.source !== 'decider' && hostOf(k) === domain) delete st.pageMap[k];
       st.reasons = st.reasons.filter((r) => !(r.scope === 'site' && r.host === domain));
     }, { immediate: true });
     await organize({ reason: 'forget-domain' });
@@ -246,10 +254,13 @@ const api = {
     const win = sender?.tab && await chrome.windows.get(sender.tab.windowId).catch(() => null);
     const key = detailsKey(sender, url, win?.type);
     if (!key) return;
-    await updateState((st) => {
+    const changed = await updateState((st) => {
       const now = Date.now();
+      const before = JSON.stringify(st.tabMeta[key]?.details);
       st.tabMeta[key] = { ...(st.tabMeta[key] || { firstSeen: now, lastAccessed: now }), details };
+      return before !== JSON.stringify(details);
     });
+    if (changed) scheduleOrganize('page-details');
   },
   getSettings: () => getSettings(),
   async setSettings({ patch }) {
@@ -262,8 +273,7 @@ const api = {
   // Long engine calls (load, self-test) go from the page straight to the offscreen document,
   // so they don't depend on this worker outliving them.
   ensureEngine: () => ensureOffscreen(),
-  // re-check domains that were placed by fallbacks now that the decider is ready
-  modelReady: () => organize({ reason: 'model-ready', reassign: 'heuristic' }),
+  modelReady: () => organize({ reason: 'model-ready' }),
   async unloadModel() { await closeOffscreen(); },
   async exportData() {
     const { settings, state } = await chrome.storage.local.get(['settings', 'state']);
