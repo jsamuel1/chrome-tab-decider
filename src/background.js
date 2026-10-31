@@ -13,6 +13,8 @@ import { OTHER_ID, mergeCategories } from './lib/categories.js';
 import { isRename, nameFromTitle } from './lib/grouping.js';
 import { detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
 import { recordUse, pruneUsage } from './lib/usage.js';
+import { bookmarkFolders } from './lib/bookmarks.js';
+import { onboardingSuggestions, saveProfile } from './lib/onboarding.js';
 
 // ---------- debouncers
 const timers = {};
@@ -46,7 +48,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   if (!settings) await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
   setupAlarms();
   injectContentScripts();
-  if (reason === 'install') chrome.runtime.openOptionsPage();
+  if (reason === 'install') chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
   organize({ reason: 'installed' }).then(() => scheduleSnapshot(500));
   prefetchModel('install');
 });
@@ -216,7 +218,7 @@ const api = {
     }
     cats.sort((a, b) => (b.pinned - a.pinned) || (b.tabCount - a.tabCount));
     const ready = !!engine?.downloaded;
-    return { settings, engine, ready, llm, categories: cats, archiveCount: st.archive.length, stats: st.stats, snapshotAt: st.snapshot?.savedAt };
+    return { settings, engine, ready, llm, profile: st.profile, categories: cats, archiveCount: st.archive.length, stats: st.stats, snapshotAt: st.snapshot?.savedAt };
   },
   organize: ({ rediscover, categories }) => organize({ rediscover, categories, reason: 'manual' }).then(() => scheduleSnapshot(300)),
   sort: () => sortAll(),
@@ -250,6 +252,16 @@ const api = {
   async addCategory({ name, description }) {
     await updateState((st) => { mergeCategories(st, [{ name, description }], 'user'); }, { immediate: true });
     await organize({ reason: 'add-category' });
+  },
+  async onboardingSuggestions() {
+    const tabs = (await chrome.tabs.query({})).filter((t) => !t.incognito);
+    const folders = await bookmarkFolders().catch(() => []);
+    return onboardingSuggestions(tabs, folders, (await getState()).tabMeta);
+  },
+  async saveProfile({ profile }) {
+    const saved = await updateState((st) => saveProfile(st, profile), { immediate: true });
+    await organize({ reason: 'profile' });
+    return saved;
   },
   async forgetDomain({ domain }) {
     await updateState((st) => {

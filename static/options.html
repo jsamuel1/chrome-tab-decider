@@ -10,6 +10,44 @@
     <h1>TabSage</h1>
     <div class="muted">Auto-groups your tabs by domain and topic, sorted dynamically, persisted across restarts. Everything runs on this device.</div>
 
+    <h2>Your profile</h2>
+    <div class="card">
+      <div class="field">
+        <label for="p_company">Company</label>
+        <input type="text" id="p_company" />
+      </div>
+      <div class="field">
+        <label for="p_domains">Company web domains</label>
+        <input type="text" id="p_domains" placeholder="e.g. amazon.com, a2z.com" />
+        <div class="help">Pages on these sites are usually treated as work.</div>
+      </div>
+      <div class="field">
+        <label for="p_work">Type of work</label>
+        <input type="text" id="p_work" />
+      </div>
+      <div class="field">
+        <label for="p_projects">Projects or customers</label>
+        <input type="text" id="p_projects" placeholder="Separated by commas" />
+      </div>
+      <div class="field">
+        <label for="p_style">Grouping</label>
+        <select id="p_style">
+          <option value="specific-work">By project or customer at work, by topic for personal</option>
+          <option value="generic">By general topic everywhere</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="p_categories">Categories</label>
+        <input type="text" id="p_categories" placeholder="Separated by commas" />
+        <div class="help">Each project and category becomes a folder. Removing one here does not delete its folder; do that below.</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+        <button id="saveProfile" class="primary">Save profile</button>
+        <button id="rerunOnboarding">Run onboarding again</button>
+        <span id="profileMsg" class="muted"></span>
+      </div>
+    </div>
+
     <h2>On-device AI</h2>
     <div class="card">
       <div class="field">
@@ -59,10 +97,6 @@
           <button id="prepareLLM" hidden>Download Gemini Nano</button>
         </div>
         <div class="help">One pass over all tab titles proposes folder names; the decider then files each domain into one of them. Falls back to keyword extraction.</div>
-      </div>
-      <div class="field">
-        <label for="seedCategories">Always-offered folders</label>
-        <input type="text" id="seedCategories" data-key="seedCategories" placeholder="e.g. AWS, Robotics, Espresso" />
       </div>
       <div class="field">
         <label for="minConfidence">Min. confidence</label>

@@ -32,6 +32,7 @@ const opts = {
     offscreen: 'src/offscreen/offscreen.js',
     popup: 'src/popup/popup.js',
     options: 'src/options/options.js',
+    onboarding: 'src/onboarding/onboarding.js',
     lazy: 'src/lazy/lazy.js',
   },
   outdir: 'dist',

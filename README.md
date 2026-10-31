@@ -53,7 +53,7 @@ Other choices in Settings: All entries share the fused-graph contract
 ## How classification works
 
 1. **Cluster** tabs by hostname (or registrable domain — setting).
-2. **Discover** folders once over all titles (`LanguageModel.prompt` with a JSON schema), merged with any "always-offered" folders you set. Existing folder names are passed back in so they stay stable.
+2. **Discover** folders once over all titles (`LanguageModel.prompt` with a JSON schema), alongside the folders from your onboarding profile. Existing folder names are passed back in so they stay stable.
 3. **Decide** for each *new* domain: state = site + its tab titles; question = `choice` over the folders + Other. The prompt is a byte-exact port of `strands_decider/prompting.py`; the option pointer positions are recovered from byte-level BPE token boundaries (`src/engine/tokens.js`) and verified by the self-test.
 4. **Apply**: top *N* categories get groups per window; everything else goes to Other. Then sort.
 

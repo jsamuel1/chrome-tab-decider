@@ -60,11 +60,3 @@ export function mergeCategories(st, list, source) {
   }
   return out;
 }
-
-export function seedList(settings) {
-  return String(settings.seedCategories || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((name) => ({ name, description: '' }));
-}

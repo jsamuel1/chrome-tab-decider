@@ -47,7 +47,32 @@ async function load() {
   modelStatus();
   llmStatus();
   cats();
+  profile();
 }
+
+const PROFILE_TEXT = { company: 'p_company', work: 'p_work', style: 'p_style' };
+const PROFILE_LISTS = { companyDomains: 'p_domains', projects: 'p_projects', categories: 'p_categories' };
+
+async function profile() {
+  const { profile: p = {} } = await bg('status');
+  for (const [k, id] of Object.entries(PROFILE_TEXT)) $(id).value = p[k] || $(id).value;
+  for (const [k, id] of Object.entries(PROFILE_LISTS)) $(id).value = (p[k] || []).join(', ');
+}
+$('saveProfile').onclick = async () => {
+  const p = {};
+  for (const [k, id] of Object.entries(PROFILE_TEXT)) p[k] = $(id).value;
+  for (const [k, id] of Object.entries(PROFILE_LISTS)) p[k] = $(id).value.split(',').map((x) => x.trim()).filter(Boolean);
+  $('saveProfile').disabled = true;
+  try {
+    await bg('saveProfile', { profile: p });
+    $('profileMsg').textContent = 'Saved';
+    cats();
+  } catch (e) {
+    $('profileMsg').textContent = `Failed: ${e.message}`;
+  }
+  $('saveProfile').disabled = false;
+};
+$('rerunOnboarding').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
 
 async function modelStatus() {
   try {

@@ -58,3 +58,16 @@ th { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weigh
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { background: var(--chip); border-radius: 999px; padding: 1px 8px; font-size: 11px; cursor: pointer; }
 .chip:hover { text-decoration: line-through; }
+
+/* onboarding */
+.onboarding .step { margin-top: 20px; }
+.onboarding .step h2 { margin: 0 0 8px; }
+.onboarding .nav { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+.onboarding .nav #next { margin-left: auto; }
+.chips.pick .chip { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; font-size: 12px; }
+.chips.pick .chip:hover { text-decoration: none; background: var(--hover); }
+.choice { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.choice:first-of-type { border-top: 0; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 12px; margin-top: 10px; }
+.check { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+textarea { resize: vertical; }

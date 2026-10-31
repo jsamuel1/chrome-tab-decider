@@ -4,7 +4,7 @@ import { getSettings, getState, updateState } from './store.js';
 import { hostOf, isGroupable, pageKey, realUrl } from './urls.js';
 import { DAILY_ID, OTHER_ID, ensureDaily, ensureOther, findByName, mergeCategories } from './categories.js';
 import { ai, classifierReady, deciderStatus } from './ai.js';
-import { candidateTerms } from './bm25.js';
+import { candidateTerms, displayName } from './bm25.js';
 import { profileText } from './profile.js';
 import { bookmarkFolders, bookmarkHint } from './bookmarks.js';
 import { groupTitle, isRename, nameFromTitle, planGroups } from './grouping.js';
@@ -133,16 +133,6 @@ async function decide(st, settings, tab, folders) {
     console.warn('[TabSage] decider failed', e);
     return null;
   }
-}
-
-// The words of a candidate term as they are written in the user's own tabs ("acme" → "Acme").
-function displayName(term, texts) {
-  const re = new RegExp(term.split(' ').map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+'), 'iu');
-  for (const t of texts) {
-    const m = t.match(re);
-    if (m) return m[0].replace(/\s+/g, ' ');
-  }
-  return term;
 }
 
 function folderState(st, texts) {

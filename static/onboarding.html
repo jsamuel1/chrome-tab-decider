@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Welcome to TabSage</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options onboarding">
+    <h1>Welcome to TabSage</h1>
+    <div class="muted">A few questions while the classifier downloads. Your answers stay in this browser, and you can change them in Settings at any time.</div>
+
+    <form id="steps" autocomplete="off">
+      <section class="step card" data-step="company">
+        <h2>Where do you work?</h2>
+        <div class="field">
+          <label for="company">Company</label>
+          <input type="text" id="company" placeholder="e.g. Amazon" />
+        </div>
+        <div class="field">
+          <label>Its web domains</label>
+          <div>
+            <div class="chips pick" id="domains"></div>
+            <input type="text" id="moreDomains" placeholder="More, separated by commas" style="margin-top:6px" />
+          </div>
+          <div class="help">Pages on these sites are usually treated as work. Ticked ones come from your open tabs.</div>
+        </div>
+      </section>
+
+      <section class="step card" data-step="work" hidden>
+        <h2>What kind of work do you do?</h2>
+        <div class="field">
+          <label for="work">In your own words</label>
+          <input type="text" id="work" placeholder="e.g. a solutions architect working with retail customers" />
+        </div>
+      </section>
+
+      <section class="step card" data-step="projects" hidden>
+        <h2>Your current projects or customers</h2>
+        <div class="field">
+          <label for="projects">One per line (optional)</label>
+          <textarea id="projects" rows="5" placeholder="Acme&#10;Payroll"></textarea>
+          <div class="help">Each one becomes a folder, shown as a group named after your company, such as "Amazon · Acme".</div>
+        </div>
+      </section>
+
+      <section class="step card" data-step="style" hidden>
+        <h2>How should your tabs be grouped?</h2>
+        <label class="choice"><input type="radio" name="style" value="specific-work" checked />
+          <span><b>By project or customer at work</b>, and by general topic for everything else</span></label>
+        <label class="choice"><input type="radio" name="style" value="generic" />
+          <span><b>By general topic</b> everywhere</span></label>
+      </section>
+
+      <section class="step card" data-step="categories" hidden>
+        <h2>Pick your categories</h2>
+        <div class="muted small">Suggested from your bookmark folders and open tabs. Each one you keep becomes a folder.</div>
+        <div class="checks" id="categories"></div>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <input type="text" id="newCategory" placeholder="Add your own…" />
+          <button type="button" id="addCategory">Add</button>
+        </div>
+      </section>
+
+      <section class="step card" data-step="done" hidden>
+        <h2>All set</h2>
+        <div id="doneText">TabSage will start sorting your tabs once the classifier has downloaded.</div>
+        <div id="dlStatus" class="muted" style="margin-top:8px">Checking the classifier…</div>
+        <progress id="dlProg" max="100" value="0" hidden></progress>
+        <div style="display:flex;gap:6px;margin-top:12px">
+          <button type="button" id="openSettings">Open Settings</button>
+        </div>
+      </section>
+
+      <div class="nav">
+        <button type="button" id="back" hidden>Back</button>
+        <span class="muted small" id="where"></span>
+        <button type="submit" id="next" class="primary">Next</button>
+      </div>
+    </form>
+    <script type="module" src="onboarding.js"></script>
+  </body>
+</html>

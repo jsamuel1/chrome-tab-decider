@@ -96,3 +96,13 @@ export function candidateTerms(docs, { minDocs = 2, max = 12 } = {}) {
   });
   return result.sort((a, b) => b.score - a.score || a.term.localeCompare(b.term)).slice(0, max);
 }
+
+// The words of a candidate term as they are written in the user's own tabs ("acme" → "Acme").
+export function displayName(term, texts) {
+  const re = new RegExp(term.split(' ').map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+'), 'iu');
+  for (const t of texts) {
+    const m = t.match(re);
+    if (m) return m[0].replace(/\s+/g, ' ');
+  }
+  return term;
+}

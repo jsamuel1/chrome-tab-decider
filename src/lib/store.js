@@ -29,7 +29,6 @@ export const DEFAULT_SETTINGS = {
   device: 'webgpu',             // 'webgpu' | 'wasm'
   useLLM: true,                 // Chrome built-in Prompt API for category discovery
   idleUnloadMin: 10,
-  seedCategories: '',           // optional comma-separated categories always offered
 };
 
 const DEFAULT_STATE = {
