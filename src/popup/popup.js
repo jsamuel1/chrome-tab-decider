@@ -20,6 +20,9 @@ async function refresh() {
         <button class="star ${c.pinned ? 'on' : ''}" data-pin="${c.id}" title="${c.pinned ? 'Unpin group' : 'Pin group to the front'}">${c.pinned ? '★' : '☆'}</button>
       </div>`).join('')
     : `<div class="empty">No groups yet — press Organize.</div>`;
+  const fresh = status.categories.filter((c) => c.isNew).length;
+  $('newFolders').hidden = !fresh;
+  $('newFolders').textContent = `${fresh} new folder${fresh === 1 ? '' : 's'} to review`;
   $('foot').textContent = `${status.archiveCount} archived · trims unvisited tabs after ${status.settings.archiveDays} days` +
     (status.stats?.organizedAt ? ` · organized ${ago(status.stats.organizedAt)}` : '');
 }
@@ -66,6 +69,7 @@ $('rediscover').onclick = () =>
     await bg('organize', { rediscover: true, categories });
   });
 $('settings').onclick = () => chrome.runtime.openOptionsPage();
+$('newFolders').onclick = (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); };
 
 // ---------- search
 let searchTimer;

@@ -3,6 +3,7 @@
 import { getSettings, setSettings, getState, updateState, flushState, DEFAULT_SETTINGS } from './lib/store.js';
 import { organize, learnFromUser, expectedGroupChange, manualTabs, catForGroup, groupCat, markActivity, saveWhy, noteTabClosed, noteUnpinned, notePinnedNavigated } from './lib/organizer.js';
 import { deleteReason as removeReason } from './lib/reasons.js';
+import { reviewFolder as review } from './lib/review.js';
 import { sortAll } from './lib/sorter.js';
 import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
 import { runArchive, search, reopenArchived, deleteArchived } from './lib/archive.js';
@@ -218,7 +219,7 @@ const api = {
     }
     cats.sort((a, b) => (b.pinned - a.pinned) || (b.tabCount - a.tabCount));
     const ready = !!engine?.downloaded;
-    return { settings, engine, ready, llm, profile: st.profile, categories: cats, archiveCount: st.archive.length, stats: st.stats, snapshotAt: st.snapshot?.savedAt };
+    return { settings, engine, ready, llm, profile: st.profile, categories: cats, reasons: st.reasons, archiveCount: st.archive.length, stats: st.stats, snapshotAt: st.snapshot?.savedAt };
   },
   organize: ({ rediscover, categories }) => organize({ rediscover, categories, reason: 'manual' }).then(() => scheduleSnapshot(300)),
   sort: () => sortAll(),
@@ -275,6 +276,10 @@ const api = {
   async saveReason({ optionId, text }, sender) {
     if (sender?.id !== chrome.runtime.id || !sender.tab || sender.frameId !== 0) return false;
     return saveWhy(sender.tab, { optionId, text });
+  },
+  async reviewFolder(args) {
+    await updateState((st) => { review(st, args); }, { immediate: true });
+    await organize({ reason: 'review-folder' });
   },
   async deleteReason({ id }) {
     await updateState((st) => { removeReason(st, id); }, { immediate: true });

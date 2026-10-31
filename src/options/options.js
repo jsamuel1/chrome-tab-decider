@@ -47,6 +47,7 @@ async function load() {
   modelStatus();
   llmStatus();
   cats();
+  review();
   profile();
 }
 
@@ -182,6 +183,45 @@ $('cats').addEventListener('change', async (e) => {
   const r = e.target.closest('[data-rename]');
   if (r && r.value.trim()) { await bg('renameCategory', { catId: r.dataset.rename, name: r.value.trim() }); cats(); }
 });
+async function review() {
+  const s = await bg('status');
+  const fresh = s.categories.filter((c) => c.isNew);
+  $('newNone').hidden = fresh.length > 0;
+  $('newFolders').innerHTML = fresh.map((c) => `
+    <tr data-new="${c.id}">
+      <td><input type="text" value="${esc(c.name)}" data-newname style="width:auto;display:inline-block;padding:3px 6px" /></td>
+      <td>${c.tabCount} tab${c.tabCount === 1 ? '' : 's'}</td>
+      <td>
+        <button data-keep>Keep</button>
+        <button data-rename>Rename</button>
+        <select data-merge><option value="">Merge into…</option>${s.categories.filter((o) => o.id !== c.id && o.id !== 'daily' && !o.isNew).map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>
+      </td>
+    </tr>`).join('');
+  $('reasonsNone').hidden = s.reasons.length > 0;
+  $('reasons').innerHTML = s.reasons.map((r) => `
+    <tr><td>${esc(r.text)}</td><td><button data-delreason="${r.id}">Delete</button></td></tr>`).join('');
+}
+async function reviewAction(e) {
+  const row = e.target.closest('[data-new]');
+  if (!row) return;
+  const catId = row.dataset.new;
+  if (e.target.matches('[data-keep]')) await bg('reviewFolder', { catId, action: 'keep' });
+  else if (e.target.matches('[data-rename]')) await bg('reviewFolder', { catId, action: 'rename', name: row.querySelector('[data-newname]').value });
+  else if (e.target.matches('[data-merge]') && e.target.value) await bg('reviewFolder', { catId, action: 'merge', intoId: e.target.value });
+  else return;
+  cats();
+  review();
+}
+$('newFolders').addEventListener('click', reviewAction);
+$('newFolders').addEventListener('change', reviewAction);
+$('reasons').addEventListener('click', async (e) => {
+  const d = e.target.closest('[data-delreason]');
+  if (!d) return;
+  await bg('deleteReason', { id: d.dataset.delreason });
+  cats();
+  review();
+});
+
 $('addCat').onclick = async () => {
   const name = $('newCat').value.trim();
   if (!name) return;
