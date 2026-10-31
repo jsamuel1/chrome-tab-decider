@@ -41,7 +41,7 @@ const count = (type) => calls.filter(([t]) => t === type).length;
 
 const tab = (id, title, url, extra = {}) => ({ id, windowId: 1, url, title, groupId: -1, ...extra });
 
-test('Other filling up finds a folder in the tabs themselves and files them there', async () => {
+test('Other filling up finds a folder in the tabs themselves; its pages move there only once the user is quiet', async () => {
   tabs = [
     tab(1, 'Acme quarterly review', 'https://docs.example.com/1'),
     tab(2, 'Acme invoices', 'https://billing.example.org/2'),
@@ -50,18 +50,24 @@ test('Other filling up finds a folder in the tabs themselves and files them ther
     tab(5, 'Bike repair', 'https://bikes.example.com/5'),
     tab(6, 'Weather', 'https://weather.example.com/6'),
   ];
-  await organize({ reason: 'test' });
+  const acmePages = ['https://docs.example.com/1', 'https://billing.example.org/2', 'https://wiki.example.net/3'];
+  markActivity(Date.now());
+  await organize({ reason: 'tab-updated' });
   const st = await getState();
   const acme = Object.values(st.categories).find((c) => c.name === 'Acme');
   assert.ok(acme, 'no Acme folder was created');
   assert.equal(acme.isNew, true);
   assert.ok(calls.some(([t, p]) => t === 'decider.noul' && p.instructions === 'Would "Acme" be a sensible name for a folder holding these browser tabs?'));
-  for (const u of ['https://docs.example.com/1', 'https://billing.example.org/2', 'https://wiki.example.net/3']) {
-    assert.equal(st.pageMap[u].catId, acme.id, `${u} was not filed in Acme`);
-  }
-  assert.equal(st.pageMap['https://bread.example.com/4'].catId, 'other');
   // rejected names do not become folders
   assert.equal(Object.values(st.categories).filter((c) => c.isNew).length, 1);
+  // Other's pages are already filed: while the user is busy they stay where they are
+  for (const u of acmePages) assert.equal(st.pageMap[u].catId, 'other', `${u} was moved while the user was busy`);
+  assert.ok(alarms.some(([name]) => name === 'organize-quiet'), 'no quiet-time run was scheduled');
+
+  markActivity(Date.now() - 3 * MIN);
+  await organize({ reason: 'organize-quiet' });
+  for (const u of acmePages) assert.equal(st.pageMap[u].catId, acme.id, `${u} was not filed in Acme`);
+  assert.equal(st.pageMap['https://bread.example.com/4'].catId, 'other');
 });
 
 test('a new folder is applied to filed pages only once the tab bar has been quiet for 2 minutes', async () => {

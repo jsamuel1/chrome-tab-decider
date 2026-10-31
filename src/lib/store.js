@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 const DEFAULT_STATE = {
-  categories: {},   // id -> { id, name, description, color, pinned, lastActive, createdAt, source, kind, parentId, isNew }
+  categories: {},   // id -> { id, name, description, color, pinned, lastActive, createdAt, source, kind, parentId, isNew, shownTitle }
   pageMap: {},      // pageKey -> { catId, confidence, source: 'decider'|'user'|'site', at, fixed, sig }
   siteRules: {},    // host -> { catId, reasonId }
   reasons: [],      // [{ id, catId, text, scope: 'page'|'site', host, url, at }]

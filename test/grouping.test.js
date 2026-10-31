@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.chrome = { runtime: { getURL: (p) => `chrome-extension://x/${p}` } };
-const { groupTitle, planGroups } = await import('../src/lib/grouping.js');
+const { groupTitle, isRename, planGroups } = await import('../src/lib/grouping.js');
 const { mergeCategories } = await import('../src/lib/categories.js');
 
 const profile = { company: 'Amazon' };
@@ -18,6 +18,17 @@ test('groupTitle prefixes work folders with the company', () => {
   assert.equal(groupTitle(cats[1], profile), 'Amazon · Acme');
   assert.equal(groupTitle(cats[0], profile), 'Amazon');
   assert.equal(groupTitle(cats[3], profile), 'Travel');
+});
+
+test('isRename tells a user rename from a title TabSage gave under an earlier company', () => {
+  const acme = { id: 'w', name: 'Acme', kind: 'work' };
+  assert.equal(isRename(acme, 'AWS · Acme', { company: 'AWS' }), false);
+  assert.equal(isRename(acme, 'Amazon · Acme', { company: 'AWS' }), false, 'company changed');
+  assert.equal(isRename(acme, 'Amazon · Acme', { company: '' }), false, 'company cleared');
+  assert.equal(isRename(acme, 'Acme', { company: 'AWS' }), false, 'company newly set');
+  assert.equal(isRename({ ...acme, kind: 'company', name: 'Amazon', shownTitle: 'Amazon' }, 'Amazon', { company: 'AWS' }), false, 'title TabSage set');
+  assert.equal(isRename(acme, 'AWS · Widgets', { company: 'AWS' }), true);
+  assert.equal(isRename(acme, 'Widgets', { company: 'AWS' }), true);
 });
 
 test('planGroups folds the lowest ranked into the parent and keeps Daily out of the count', () => {

@@ -7,7 +7,7 @@ import { ai, classifierReady, deciderStatus } from './ai.js';
 import { candidateTerms } from './bm25.js';
 import { profileText } from './profile.js';
 import { bookmarkFolders, bookmarkHint } from './bookmarks.js';
-import { groupTitle, nameFromTitle, planGroups } from './grouping.js';
+import { groupTitle, isRename, nameFromTitle, planGroups } from './grouping.js';
 import { decisionOrder, decisionState, pageText, shortlist, shouldMove } from './decide.js';
 import { sortAll } from './sorter.js';
 
@@ -28,7 +28,8 @@ const LONG = 30 * 60 * 1000;      // the first question may wait for the model t
 let chain = Promise.resolve();
 export { classifierReady };
 export let lastEngine = '';
-// 0 after a service-worker restart: the quiet-time alarm that woke it means the tab bar has been quiet.
+// Kept in session storage too: the service worker restarts after half a minute idle, and many events
+// that wake it (title changes, page details) do not count as activity.
 let lastActivity = 0;
 // Names the classifier turned down this session, so they are not asked about again and again.
 const rejected = new Set();
@@ -36,6 +37,26 @@ const rejected = new Set();
 /** A tab or group event from the user: filed pages wait for a quiet moment before being re-decided. */
 export function markActivity(at = Date.now()) {
   lastActivity = at;
+  return chrome.storage.session?.set({ lastActivity: at }).catch(() => {});
+}
+
+// When the user was last busy. Unknown (a fresh browser session) counts as just now, so nothing moves
+// until the tab bar has really been quiet.
+async function activityAt() {
+  if (!lastActivity) {
+    const stored = await chrome.storage.session?.get('lastActivity').catch(() => null);
+    if (stored?.lastActivity) lastActivity = stored.lastActivity;
+    else await markActivity(Date.now());
+  }
+  return lastActivity;
+}
+
+// The tab the user is looking at right now: the active tab of the last-focused normal window.
+async function lookingAtNow() {
+  const w = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
+  if (!w) return undefined;
+  const tabs = await chrome.tabs.query({ windowType: 'normal' });
+  return tabs.find((t) => t.active && t.windowId === w.id)?.id;
 }
 
 /** Serialize organize runs. */
@@ -49,7 +70,10 @@ const realCats = (st) => Object.values(st.categories).filter((c) => c.id !== OTH
 const keyOf = (t) => pageKey(realUrl(t));
 
 function catByTitle(st, title) {
-  return Object.values(st.categories).find((c) => groupTitle(c, st.profile) === title) || findByName(st, title);
+  const cats = Object.values(st.categories);
+  return cats.find((c) => groupTitle(c, st.profile) === title) || cats.find((c) => c.shownTitle === title) || findByName(st, title)
+    // a work group titled under a company the profile no longer names
+    || cats.find((c) => c.kind === 'work' && title.endsWith(` · ${c.name}`));
 }
 
 // A short fingerprint of a page's details: when they change, the page is decided again.
@@ -176,7 +200,7 @@ async function adoptUserGroups(st) {
     if (groupCat.has(g.id)) {
       // keep category name in sync with user renames
       const cat = st.categories[groupCat.get(g.id)];
-      if (cat && g.title && cat.id !== OTHER_ID && g.title !== groupTitle(cat, st.profile)) cat.name = nameFromTitle(cat, g.title, st.profile);
+      if (cat && g.title && cat.id !== OTHER_ID && isRename(cat, g.title, st.profile)) cat.name = nameFromTitle(cat, g.title, st.profile);
       continue;
     }
     if (!g.title) continue;
@@ -196,20 +220,19 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   await adoptUserGroups(st);
   if (categories?.length) mergeCategories(st, categories, 'llm');
 
+  // tabs sitting in an unnamed group the user made by hand, or pulled out by hand: leave them be
+  const eligible = (tabs) => tabs.filter((t) => isGroupable(t) && !manualTabs.has(t.id) && (t.groupId === -1 || groupCat.has(t.groupId)));
   const all = await chrome.tabs.query({ windowType: 'normal' });
-  const groupable = all.filter((t) => isGroupable(t) && !manualTabs.has(t.id));
-  // tabs sitting in an unnamed group the user made by hand: leave them be
-  const unknownGroup = (t) => t.groupId !== -1 && !groupCat.has(t.groupId);
-  const candidates = groupable.filter((t) => !unknownGroup(t));
+  const candidates = eligible(all);
   const now = Date.now();
-  for (const t of groupable) {
+  for (const t of all.filter((t) => isGroupable(t) && !manualTabs.has(t.id))) {
     const u = keyOf(t);
     if (!st.tabMeta[u]) st.tabMeta[u] = { firstSeen: now, lastAccessed: t.lastAccessed || now };
   }
 
   const focused = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
   const focusedWindowId = focused?.id ?? null;
-  // The tab the user is looking at is never moved, and never re-decided.
+  // The tab the user is looking at is never re-decided (and, checked again just before grouping, never moved).
   const lookingAt = candidates.find((t) => t.active && t.windowId === focusedWindowId)?.id;
   const pages = onePerPage(decisionOrder(candidates, { activeTabIds: candidates.filter((t) => t.active).map((t) => t.id), focusedWindowId }));
 
@@ -222,11 +245,17 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
     return !more;
   };
   let folders = null;
-  const ask = async (t) => {
+  // Ask about one page; `choose` turns the answer into the entry to keep. While the classifier
+  // thinks, the user may place the page by hand (or something else may decide it): that wins.
+  const ask = async (t, choose = (cur, next) => next) => {
     used++;
+    const key = keyOf(t);
+    const before = st.pageMap[key];
     const r = await decide(st, settings, t, () => (folders ||= bookmarkFolders().catch(() => [])));
     if (!device) device = (await deciderStatus(settings))?.device; // the engine picks its device when it loads
-    return r;
+    const cur = st.pageMap[key];
+    if (!r || cur?.fixed || (cur && cur !== before && (cur.at || 0) > (before?.at || 0))) return;
+    st.pageMap[key] = choose(cur, r);
   };
 
   for (const [k, m] of Object.entries(st.pageMap)) if (!st.categories[m.catId]) delete st.pageMap[k];
@@ -245,24 +274,20 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
     const m = st.pageMap[keyOf(t)];
     if (m && (m.fixed || (m.sig || '') === detailsSig(st.tabMeta[keyOf(t)]?.details))) continue;
     if (!room()) break;
-    const r = await ask(t);
-    if (r) st.pageMap[keyOf(t)] = r;
+    await ask(t);
   }
 
-  // --- 3. Other is filling up → find new folders in the tabs, then ask again for Other's pages
+  // --- 3. Other is filling up → find new folders in the tabs. Other's pages are already filed, so
+  // the new folders reach them through step 4, at a quiet moment.
   const inOther = () => pages.filter((t) => {
     const m = st.pageMap[keyOf(t)];
     return m?.catId === OTHER_ID && !m.fixed;
   });
   if (settings.autoDiscover && inOther().length >= 3 && (rediscover || now - st.lastDiscovery > DISCOVER_EVERY) && room()) {
     const added = await discover(st, settings, pages, inOther());
-    if (added.length) {
-      for (const t of inOther()) {
-        if (!room()) break;
-        const r = await ask(t);
-        if (r) st.pageMap[keyOf(t)] = r;
-      }
-    }
+    // pages decided earlier in this run, even within the same millisecond, were decided without these folders
+    const latest = Math.max(0, ...Object.values(st.pageMap).map((m) => m.at || 0));
+    for (const c of added) c.createdAt = Math.max(c.createdAt || 0, latest + 1);
   }
 
   // --- 4. new folders, reasons and profile edits reach filed pages only at a quiet moment, and only clearly better answers move them
@@ -271,27 +296,28 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
     const m = st.pageMap[keyOf(t)];
     return m && !m.fixed && m.at < changedAt && t.id !== lookingAt;
   });
-  if (stale.length && Date.now() - lastActivity < QUIET_MS) {
-    chrome.alarms.create('organize-quiet', { when: lastActivity + QUIET_MS + 5000 });
+  const busySince = stale.length ? await activityAt() : 0;
+  if (stale.length && Date.now() - busySince < QUIET_MS) {
+    chrome.alarms.create('organize-quiet', { when: busySince + QUIET_MS + 5000 });
   } else {
     for (const t of stale) {
       if (!room()) break;
-      const cur = st.pageMap[keyOf(t)];
-      const next = await ask(t);
-      if (next) st.pageMap[keyOf(t)] = shouldMove(cur, next, { cats: st.categories }) ? next : { ...cur, at: next.at };
+      await ask(t, (cur, next) => (shouldMove(cur, next, { cats: st.categories }) ? next : { ...cur, at: next.at }));
     }
   }
   if (more) chrome.alarms.create('organize-more', { delayInMinutes: 0.5 });
 
-  // --- 5. folders → groups: the lowest-ranked fold into their parents
+  // --- 5. folders → groups: the lowest-ranked fold into their parents. The tabs are read again, as
+  // the classifier may have taken a while and the user may have moved, closed or switched tabs.
+  const fresh = eligible(await chrome.tabs.query({ windowType: 'normal' }));
   const counts = new Map();
-  for (const t of candidates) {
+  for (const t of fresh) {
     const id = st.pageMap[keyOf(t)]?.catId;
     if (st.categories[id]) counts.set(id, (counts.get(id) || 0) + 1);
   }
   const plan = planGroups(Object.values(st.categories), counts, settings.maxGroups);
   const byWindow = new Map();
-  for (const t of candidates) {
+  for (const t of fresh) {
     const id = st.pageMap[keyOf(t)]?.catId;
     if (!st.categories[id]) continue; // the decider could not place it: leave the tab be
     const catId = plan.get(id) || OTHER_ID;
@@ -313,7 +339,9 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
       const cat = st.categories[catId];
       const title = groupTitle(cat, st.profile);
       let gid = gidFor.get(catId);
-      const moving = tabs.filter((t) => t.id !== lookingAt && (gid === undefined || t.groupId !== gid)).map((t) => t.id);
+      const pending = tabs.filter((t) => gid === undefined || t.groupId !== gid);
+      const looking = pending.length ? await lookingAtNow() : undefined;
+      const moving = pending.filter((t) => t.id !== looking).map((t) => t.id);
       try {
         if (gid === undefined) {
           if (!moving.length) continue;
@@ -321,6 +349,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
           gid = await chrome.tabs.group({ tabIds: moving, createProperties: { windowId } });
           groupCat.set(gid, catId);
           gidFor.set(catId, gid);
+          cat.shownTitle = title;
           await chrome.tabGroups.update(gid, { title, color: cat.color });
         } else {
           if (moving.length) {
@@ -328,7 +357,10 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
             await chrome.tabs.group({ tabIds: moving, groupId: gid });
           }
           const g = groups.find((x) => x.id === gid);
-          if (g && (g.title !== title || g.color !== cat.color)) await chrome.tabGroups.update(gid, { title, color: cat.color });
+          if (g && (g.title !== title || g.color !== cat.color)) {
+            cat.shownTitle = title;
+            await chrome.tabGroups.update(gid, { title, color: cat.color });
+          }
         }
       } catch (e) {
         console.warn('[TabSage] grouping failed (user dragging?)', e.message);

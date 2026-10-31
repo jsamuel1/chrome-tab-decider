@@ -16,6 +16,17 @@ export function nameFromTitle(cat, title, profile) {
   return prefix && title.startsWith(prefix) ? title.slice(prefix.length) : title;
 }
 
+/**
+ * True when a group's title is the user's own rename rather than a title TabSage gave it. A title
+ * TabSage set earlier (`cat.shownTitle`), or one made under a company the profile no longer names,
+ * is not a rename: the group is simply due a new title.
+ */
+export function isRename(cat, title, profile) {
+  if (!title || title === groupTitle(cat, profile) || title === cat.shownTitle) return false;
+  if (cat.kind === 'work' && (title === cat.name || title.endsWith(` · ${cat.name}`))) return false;
+  return true;
+}
+
 // True when key a sorts before key b, comparing element by element.
 function before(a, b) {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i];

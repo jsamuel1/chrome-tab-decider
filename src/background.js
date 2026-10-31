@@ -9,7 +9,7 @@ import { ai, closeOffscreen, ensureOffscreen, unloadIfIdle } from './lib/ai.js';
 import { modelError } from './engine/models.js';
 import { hostOf, realUrl, pageKey } from './lib/urls.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
-import { groupTitle, nameFromTitle } from './lib/grouping.js';
+import { isRename, nameFromTitle } from './lib/grouping.js';
 import { detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
 
 // ---------- debouncers
@@ -173,7 +173,7 @@ chrome.tabGroups.onUpdated.addListener(async (g) => {
     await updateState((st) => {
       const c = st.categories[catId];
       if (!c) return;
-      if (g.title && g.title !== groupTitle(c, st.profile) && catId !== OTHER_ID) c.name = nameFromTitle(c, g.title, st.profile);
+      if (catId !== OTHER_ID && isRename(c, g.title, st.profile)) c.name = nameFromTitle(c, g.title, st.profile);
       if (g.color && g.color !== c.color) c.color = g.color;
     });
   } else if (g.title) {
