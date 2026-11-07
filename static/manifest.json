@@ -15,7 +15,8 @@
     "favicon",
     "scripting",
     "bookmarks",
-    "sidePanel"
+    "sidePanel",
+    "sessions"
   ],
   "host_permissions": [
     "https://huggingface.co/*",

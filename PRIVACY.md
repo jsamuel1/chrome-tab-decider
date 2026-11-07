@@ -99,6 +99,7 @@ To remove it:
 | `alarms` | Wake up to re-sort, and to close tabs you have stopped using. |
 | `favicon` | Show a saved site icon for a tab that has not been loaded back in yet. |
 | `sidePanel` | Show the Recent side panel, which lists your recent and most-used tabs so you can switch to them. |
+| `sessions` | When you reopen a tab TabSage closed, find it in Chrome's recently closed tabs and restore it, so its Back button still works. Nothing else in that list is used, and nothing is sent anywhere. |
 | `huggingface.co`, `hf.co` | Download the classifier. Nothing is uploaded to them. |
 
 ## Children

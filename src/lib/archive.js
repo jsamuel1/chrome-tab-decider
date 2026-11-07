@@ -4,6 +4,7 @@ import { getSettings, getState, updateState, uid } from './store.js';
 import { hostOf, isGroupable, lazyUrl, pageKey, realTitle, realUrl } from './urls.js';
 import { catForGroup, organize } from './organizer.js';
 import { OTHER_ID } from './categories.js';
+import { closedTabFor } from './closed.js';
 
 export async function runArchive({ dryRun = false } = {}) {
   const settings = await getSettings();
@@ -70,7 +71,16 @@ export async function reopenArchived(id, { lazy = false } = {}) {
   const st = await getState();
   const item = st.archive.find((a) => a.id === id);
   if (!item) return null;
-  const tab = await chrome.tabs.create({ url: lazy ? lazyUrl(item) : item.url, active: !lazy });
+  // Restored from Chrome's recently closed list, the tab keeps its Back history. Chrome only keeps the
+  // last few closed tabs, so older ones open fresh. In the background a placeholder is used instead,
+  // as a restored tab always loads and comes to the front.
+  let tab = null;
+  if (!lazy) {
+    const closed = await chrome.sessions?.getRecentlyClosed().catch(() => []);
+    const sessionId = closedTabFor(closed, item.url);
+    if (sessionId) tab = (await chrome.sessions.restore(sessionId).catch(() => null))?.tab || null;
+  }
+  if (!tab) tab = await chrome.tabs.create({ url: lazy ? lazyUrl(item) : item.url, active: !lazy });
   await updateState((s) => {
     s.archive = s.archive.filter((a) => a.id !== id);
     s.tabMeta[pageKey(item.url)] = { firstSeen: Date.now(), lastAccessed: Date.now() };

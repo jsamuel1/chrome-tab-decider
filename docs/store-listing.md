@@ -38,6 +38,8 @@ close tabs you have stopped using.
 **`favicon`** — Shows a saved site icon on a placeholder tab that has not been loaded back in yet
 
 **`sidePanel`** — Shows the Recent side panel, which lists the user's most recently used and most-used open tabs so they can switch to one with a click or the keyboard. It only reads tab titles and addresses already available through `tabs`, and never sends them anywhere.
+
+**`sessions`** — When the user reopens, from TabSage's search, a tab TabSage closed after it went unused, TabSage looks for that tab in Chrome's recently closed tabs and restores it, so it comes back with its Back history instead of as a fresh tab. Only the entry for that page is used; nothing is read for any other purpose or sent anywhere.
 after Chrome restarts.
 
 **`scripting`** — Shows a small "Why?" card on a page right after you move its tab to another group
