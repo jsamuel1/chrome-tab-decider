@@ -3,15 +3,48 @@
 The answers to paste into the Chrome Web Store Developer Dashboard. They must agree with
 [PRIVACY.md](../PRIVACY.md) and the public privacy policy; when one changes, change all of them.
 
+## Store listing tab
+
+**Short description** (132 characters at most; this is the manifest's `description`, so it is filled
+in already):
+
+> Keeps your tabs in auto-sorted Chrome tab groups, classified on-device with Strands Decider (WebGPU) and Chrome's built-in LLM.
+
+**Category:** Productivity → Workflow & Planning. **Language:** English.
+
+**Detailed description:**
+
+```
+TabSage sorts your open tabs into Chrome's own tab groups, and it does it on your computer: the classifier that decides where each tab belongs runs inside your browser, and nothing you browse ever leaves it.
+
+• Groups that match how you work. Tell TabSage where you work, what you do and which projects or customers you have, and work tabs are grouped by project ("Amazon · Acme") while personal tabs are grouped by topic.
+• It learns from you. Move a tab to another group and a small card asks why, with one-click answers. Your reasons shape later decisions, and pages you place by hand stay where you put them.
+• New folders found in your own tabs. Distinctive words shared by several of your tabs become candidate folders, checked by the classifier before they are created. You can keep, rename or merge new folders in Settings.
+• A tab bar that holds still. Your most recently used tabs are never moved, so Ctrl+Tab still finds the tab you were just on, and other tabs are only sorted after you have left the tab bar alone for a few minutes.
+• Recent tabs one click away. The Recent side panel (Alt+Shift+R) lists your recent and most-used tabs, and your most-used pages are kept as pinned tabs.
+• Trims tabs you have stopped using. Tabs you have not looked at for a week are closed but stay searchable from the toolbar, and recently closed ones come back with their Back history.
+• Your layout survives restarts. Groups are restored without reloading every tab.
+
+Private by design: TabSage reads only each page's title, description, site name, main heading and language, plus your bookmark folders, and keeps them in the browser's local storage. There is no account, no server, no analytics and no tracking. Its only network request is a one-time download of the classifier from Hugging Face.
+
+Needs Chrome 138 or later. The classifier runs best on a graphics card with WebGPU (shader-f16).
+```
+
+**Images you upload yourself:** the 128 × 128 store icon (`static/icons/icon128.png`), at least one
+1280 × 800 screenshot, and the 440 × 280 small promo tile.
+
+**Homepage URL:** https://github.com/jsamuel1/chrome-tab-decider · **Support URL:**
+https://github.com/jsamuel1/chrome-tab-decider/issues
+
 ## Single purpose
 
 > TabSage keeps your open tabs sorted into Chrome's native tab groups. It decides which group each
-> tab belongs in using a classifier that runs inside the browser, and keeps your most-used tabs
-> pinned or at the top.
+> tab belongs in using a classifier that runs inside the browser, and keeps your recent and most-used
+> tabs within easy reach.
 
 Everything else it does serves that purpose: the toolbar search finds tabs it closed for you, the
-saved layout puts your groups back after Chrome restarts, and onboarding and the "Why?" card tell it
-how you like your tabs sorted.
+Recent side panel lists your recent and most-used tabs, the saved layout puts your groups back after
+Chrome restarts, and onboarding and the "Why?" card tell it how you like your tabs sorted.
 
 ## Permission justifications
 
@@ -36,11 +69,11 @@ hosts the classifier so it can run on the graphics card through WebGPU.
 close tabs you have stopped using.
 
 **`favicon`** — Shows a saved site icon on a placeholder tab that has not been loaded back in yet
+after Chrome restarts.
 
 **`sidePanel`** — Shows the Recent side panel, which lists the user's most recently used and most-used open tabs so they can switch to one with a click or the keyboard. It only reads tab titles and addresses already available through `tabs`, and never sends them anywhere.
 
 **`sessions`** — When the user reopens, from TabSage's search, a tab TabSage closed after it went unused, TabSage looks for that tab in Chrome's recently closed tabs and restores it, so it comes back with its Back history instead of as a fresh tab. Only the entry for that page is used; nothing is read for any other purpose or sent anywhere.
-after Chrome restarts.
 
 **`scripting`** — Shows a small "Why?" card on a page right after you move its tab to another group
 by hand, so you can say why with one click; and, once on install or update, reads the page details
