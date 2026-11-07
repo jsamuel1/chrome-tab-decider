@@ -41,6 +41,7 @@ const opts = {
     popup: 'src/popup/popup.js',
     options: 'src/options/options.js',
     onboarding: 'src/onboarding/onboarding.js',
+    recent: 'src/recent/recent.js',
     lazy: 'src/lazy/lazy.js',
     'why-frame': 'src/why/frame.js',
   },

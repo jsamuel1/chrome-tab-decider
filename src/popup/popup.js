@@ -9,7 +9,7 @@ let rows = [];
 // Recent and most-used tabs, shown before you type: the quickest way back to the tab you were just on.
 const tabRow = (it, i) => `
     <div class="row" data-i="${i}">
-      <img src="${esc(faviconFor(it.url))}" alt="" />
+      <img src="${esc(it.icon || faviconFor(it.url))}" alt="" />
       <span class="t" title="${esc(it.url)}">${esc(it.title || it.url)}</span>
     </div>`;
 async function showRecent() {

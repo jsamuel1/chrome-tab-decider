@@ -6,6 +6,7 @@ import { getSettings, getState } from './store.js';
 import { hostOf, pageKey, realTitle, realUrl } from './urls.js';
 import { catForGroup, tabBarQuiet } from './organizer.js';
 import { heldTabIds } from './recent.js';
+import { isRecentTab } from './recent-tab.js';
 import { classifierReady } from './ai.js';
 
 const lastUsed = (st, t) => Math.max(st.tabMeta[pageKey(realUrl(t))]?.lastAccessed || 0, t.lastAccessed || 0);
@@ -49,7 +50,7 @@ export async function sortAll() {
 async function sortWindow(windowId, settings, st) {
   const tabs = await chrome.tabs.query({ windowId });
   const pinnedCount = tabs.filter((t) => t.pinned).length;
-  const held = heldTabIds(tabs, settings.keepRecent);
+  const held = heldTabIds(tabs.filter((t) => !isRecentTab(t)), settings.keepRecent);
   const groups = new Map(); // gid -> tabs
   for (const t of tabs) {
     if (t.groupId === -1) continue;

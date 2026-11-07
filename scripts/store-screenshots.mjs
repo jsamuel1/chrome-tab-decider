@@ -111,9 +111,11 @@ for (const k of ['dailybrief.localhost/today', 'people.northwind.localhost/priya
   for (let i = 0; i < 3; i++) { await activate(k); await wait(250); }
 }
 
-// close whatever Chrome opened by itself (its new-tab page), so only the sample pages show
+// close whatever Chrome opened by itself (its new-tab page), so only the sample pages and TabSage's
+// Recent tab show
 await api((port) => chrome.tabs.query({}).then((ts) => {
-  const extra = ts.filter((t) => !(t.url || t.pendingUrl || '').includes(`:${port}/`)).map((t) => t.id);
+  const keep = (u) => u.includes(`:${port}/`) || u.endsWith('/recent.html');
+  const extra = ts.filter((t) => !keep(t.url || t.pendingUrl || '')).map((t) => t.id);
   return extra.length && chrome.tabs.remove(extra);
 }), PORT);
 // groups, titled and coloured as TabSage titles them. An ungrouped tab is active meanwhile: TabSage
@@ -160,7 +162,14 @@ const inMain = async (file) => {
 await activate('tracker.northwind.localhost/ATLAS-142');
 await capture('screenshot-1-groups');
 
-// 2. the toolbar menu, which opens on your recent and most-used tabs
+// 2. TabSage's Recent tab, pinned first: the tab you were on is ready, one Enter away
+const recentTab = await api(() => chrome.tabs.query({}).then((ts) => ts.find((t) => (t.url || '').endsWith('/recent.html'))?.id));
+await api((id) => chrome.tabs.update(id, { active: true }), recentTab);
+await wait(800);
+await capture('screenshot-2-recent-tab');
+await activate('tracker.northwind.localhost/ATLAS-142');
+
+// 3. the toolbar menu, which opens on your recent and most-used tabs
 await activate('wiki.northwind.localhost/atlas/architecture');
 await wait(300);
 await activate('tracker.northwind.localhost/ATLAS-142');
@@ -175,10 +184,10 @@ for (let i = 0; i < 6 && opened !== 'ok'; i++) {
 }
 if (opened !== 'ok') throw new Error(`could not open the toolbar menu: ${opened}`);
 await wait(1200);
-await capture('screenshot-2-recent');
+await capture('screenshot-3-menu');
 
 
-// 3. the "Why?" card: move a tab into another group by hand
+// 4. the "Why?" card: move a tab into another group by hand
 await activate('wiki.northwind.localhost/handbook/leave');
 await wait(400);
 await api(async ([id, title]) => {
@@ -186,21 +195,17 @@ await api(async ([id, title]) => {
   await chrome.tabs.group({ tabIds: [id], groupId: g.id });
 }, [await tabId('wiki.northwind.localhost/handbook/leave'), 'Northwind · Payroll']);
 await wait(1500);
-await capture('screenshot-3-why-card');
+await capture('screenshot-4-why-card');
 
-// 4. onboarding, on the projects step with answers filled in
+// 5. onboarding, on the projects step with answers filled in
 const onboard = await inMain('onboarding.html');
 await onboard.fill('#company', 'Northwind');
 await onboard.click('#next');
 await onboard.fill('#work', 'an engineering lead on billing and payroll');
 await onboard.click('#next');
 await onboard.fill('#projects', 'Atlas\nPayroll');
-await capture('screenshot-4-onboarding');
+await capture('screenshot-5-onboarding');
 
-// 5. onboarding's offer of Chrome's vertical tabs
-for (let i = 0; i < 3; i++) await onboard.click('#next'); // projects → style → categories → layout
-await onboard.waitForSelector('section[data-step="layout"]:not([hidden])');
-await capture('screenshot-5-vertical-tabs');
 await onboard.close();
 
 

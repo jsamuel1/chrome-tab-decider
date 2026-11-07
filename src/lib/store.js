@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS = {
   // Sorting
   groupSort: 'mru',             // 'mru' | 'count' | 'alpha' | 'manual'
   tabSort: 'domain-mru',        // 'domain-mru' | 'mru' | 'title' | 'manual'
+  recentTab: true,              // keep TabSage's Recent page as the first pinned tab in each window
   keepRecent: 5,                // your most recently used tabs in each window, which TabSage never moves
   idleMinutes: 3,               // other tabs are only moved after the tab bar has been left alone this long
   // Archive (trim ad-hoc tabs)

@@ -73,3 +73,9 @@ th { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weigh
 .check[hidden] { display: none; }
 textarea { resize: vertical; }
 
+
+/* The Recent page, TabSage's pinned first tab */
+body.recentpage main { max-width: 680px; margin: 24px auto; padding: 0 16px; }
+.recentpage .row { border-radius: 8px; }
+.recentpage .row:focus { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--hover); }
+.recentpage .hint { margin: 16px 12px; }

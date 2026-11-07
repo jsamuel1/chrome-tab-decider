@@ -21,7 +21,7 @@ TabSage sorts your open tabs into Chrome's own tab groups, and it does it on you
 • It learns from you. Move a tab to another group and a small card asks why, with one-click answers. Your reasons shape later decisions, and pages you place by hand stay where you put them.
 • New folders found in your own tabs. Distinctive words shared by several of your tabs become candidate folders, checked by the classifier before they are created. You can keep, rename or merge new folders in Settings.
 • A tab bar that holds still. Your most recently used tabs are never moved, so Ctrl+Tab still finds the tab you were just on, and other tabs are only sorted after you have left the tab bar alone for a few minutes.
-• Recent tabs one keypress away. TabSage's toolbar menu (Alt+Shift+T) opens on your recent and most-used tabs, and your most-used pages are kept as pinned tabs.
+• Recent tabs one keypress away. A Recent tab pinned first in each window (Cmd/Ctrl+1) and the toolbar menu (Alt+Shift+T) both list your recent and most-used tabs, and your most-used pages are kept as pinned tabs.
 • Trims tabs you have stopped using. Tabs you have not looked at for a week are closed but stay searchable from the toolbar, and recently closed ones come back with their Back history.
 • Your layout survives restarts. Groups are restored without reloading every tab.
 

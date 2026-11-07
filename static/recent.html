@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Recent</title>
+    <link rel="icon" href="icons/icon32.png" />
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="recentpage">
+    <main>
+      <h3 id="recentHead">Recent</h3>
+      <div id="recentList" role="listbox" aria-labelledby="recentHead"></div>
+      <h3 id="usedHead" hidden>Most used</h3>
+      <div id="usedList" role="listbox" aria-labelledby="usedHead"></div>
+      <p class="muted small hint">Click a tab, or use ↑ ↓ and Enter. This tab stays first: Cmd+1 (Ctrl+1) brings you here.</p>
+    </main>
+    <script type="module" src="recent.js"></script>
+  </body>
+</html>

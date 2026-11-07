@@ -11,6 +11,7 @@ import { ai, closeOffscreen, ensureOffscreen, unloadIfIdle } from './lib/ai.js';
 import { modelError } from './engine/models.js';
 import { hostOf, isGroupable, realTitle, realUrl, pageKey } from './lib/urls.js';
 import { recentLists } from './lib/recent.js';
+import { RECENT_PAGE, isRecentTab, planRecentTabs } from './lib/recent-tab.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
 import { groupTitle, isRename, nameFromTitle } from './lib/grouping.js';
 import { cleanDetails, detailsCount, detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
@@ -48,6 +49,35 @@ const scheduleTidy = (ms = 5000) => debounce('tidy', ms, async () => {
 let startingUp = false;
 
 // ---------- lifecycle
+// ---------- the Recent page, kept as the first pinned tab in each window
+// Windows where you closed it stay without one until Chrome restarts (session storage is cleared then).
+async function keepRecentTabs() {
+  const settings = await getSettings();
+  const { recentClosedIn = [] } = (await chrome.storage.session.get('recentClosedIn').catch(() => ({}))) || {};
+  const windows = (await chrome.windows.getAll({ windowTypes: ['normal'] })).filter((w) => !w.incognito).map((w) => w.id);
+  const tabs = await chrome.tabs.query({ windowType: 'normal' });
+  if (!settings.recentTab) {
+    const ours = tabs.filter(isRecentTab).map((t) => t.id);
+    if (ours.length) await chrome.tabs.remove(ours).catch(() => {});
+    return;
+  }
+  const plan = planRecentTabs(tabs, { windows, closedIn: recentClosedIn });
+  for (const windowId of plan.create) {
+    await chrome.tabs.create({ windowId, url: RECENT_PAGE, pinned: true, index: 0, active: false }).catch(() => {});
+  }
+  for (const id of plan.move) {
+    await chrome.tabs.update(id, { pinned: true }).catch(() => {});
+    await chrome.tabs.move(id, { index: 0 }).catch(() => {});
+  }
+  if (plan.remove.length) await chrome.tabs.remove(plan.remove).catch(() => {});
+  const ids = (await chrome.tabs.query({ windowType: 'normal' })).filter(isRecentTab).map((t) => t.id);
+  await chrome.storage.session.set({ recentTabIds: ids }).catch(() => {});
+}
+
+chrome.windows.onCreated.addListener((w) => {
+  if (w.type === 'normal') setTimeout(() => keepRecentTabs(), 500); // after Chrome has put the window's first tab in
+});
+
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   const { settings } = await chrome.storage.local.get('settings');
   if (!settings) await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
@@ -55,6 +85,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   injectContentScripts();
   if (reason === 'install') chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
   organize({ reason: 'installed' }).then(() => scheduleSnapshot(500));
+  keepRecentTabs();
   prefetchModel('install');
 });
 
@@ -81,6 +112,7 @@ async function prefetchModel(why) {
 }
 
 chrome.runtime.onStartup.addListener(async () => {
+  keepRecentTabs();
   startingUp = true;
   setupAlarms();
   injectContentScripts();
@@ -173,10 +205,14 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   } catch {}
 });
 
-chrome.tabs.onRemoved.addListener((tabId, { isWindowClosing }) => {
+chrome.tabs.onRemoved.addListener((tabId, { isWindowClosing, windowId }) => {
   clearManual(tabId);
   markActivity();
   if (isWindowClosing) return; // window/browser closing: keep the snapshot as-is for restore
+  // you closed the Recent tab: that window stays without one until Chrome restarts
+  chrome.storage.session.get(['recentTabIds', 'recentClosedIn']).then(({ recentTabIds = [], recentClosedIn = [] }) => {
+    if (recentTabIds.includes(tabId)) return chrome.storage.session.set({ recentClosedIn: [...new Set([...recentClosedIn, windowId])] });
+  }).catch(() => {});
   noteTabClosed(tabId);
   scheduleSnapshot();
   scheduleTidy();
@@ -209,7 +245,9 @@ const api = {
     const st = await getState();
     const tabs = (await chrome.tabs.query({ windowType: 'normal' })).filter((t) => !t.incognito);
     const { recent, used } = recentLists(tabs, st.usage, Date.now(), { recent: Math.min(20, nRecent), used: Math.min(20, nUsed) });
-    const brief = (t) => ({ id: t.id, windowId: t.windowId, title: realTitle(t), url: realUrl(t), active: !!t.active });
+    // a tab's own icon only when it is a data: image already in the browser; otherwise Chrome's favicon cache
+    const icon = (t) => (String(t.favIconUrl || '').startsWith('data:image/') ? t.favIconUrl : '');
+    const brief = (t) => ({ id: t.id, windowId: t.windowId, title: realTitle(t), url: realUrl(t), active: !!t.active, icon: icon(t) });
     return { recent: recent.map(brief), used: used.map(brief) };
   },
   async status() {
@@ -324,6 +362,11 @@ const api = {
     if (regroups(patch)) organize({ reason: 'settings' });
     if ('groupSort' in patch || 'tabSort' in patch) sortAll();
     if ('model' in patch || 'customModel' in patch || patch.autoDownload) prefetchModel('settings');
+    if ('recentTab' in patch) {
+      // turning it back on brings it back in every window, including ones where you closed it
+      if (patch.recentTab) await chrome.storage.session.remove('recentClosedIn').catch(() => {});
+      keepRecentTabs();
+    }
     return s;
   },
   // Long engine calls (load, self-test) go from the page straight to the offscreen document,

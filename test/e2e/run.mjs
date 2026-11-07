@@ -83,7 +83,8 @@ console.log('organize', JSON.stringify(await call('organize', { rediscover: true
 await ui.waitForTimeout(1500);
 const layout = await ui.evaluate(async () => ({
   groups: (await chrome.tabGroups.query({})).length,
-  grouped: (await chrome.tabs.query({})).filter((t) => t.groupId !== -1 || t.pinned).length,
+  // TabSage's own Recent page is pinned from the start; nothing else may be
+  grouped: (await chrome.tabs.query({})).filter((t) => (t.groupId !== -1 || t.pinned) && !t.url.endsWith('/recent.html')).length,
 }));
 const status = (await call('status')).result;
 console.log('status.ready', status?.ready, 'engine', JSON.stringify(status?.engine), 'llm', status?.llm);
@@ -96,6 +97,17 @@ console.log('search', JSON.stringify((await call('search', { query: 'espresso' }
 const lazy = await ctx.newPage();
 await lazy.goto(`chrome-extension://${id}/lazy.html#u=${encodeURIComponent('http://news.localhost:8099/?t=Later')}&t=Saved%20title&f=`);
 console.log('lazy title', await lazy.title());
+// TabSage's Recent page is the first tab, pinned, and lists the open test pages
+const first = await until(() => ui.evaluate(async () => {
+  const [t] = await chrome.tabs.query({ index: 0, windowType: 'normal' });
+  return t && t.pinned && (t.url || t.pendingUrl || '').endsWith('/recent.html') ? t : null;
+}));
+const recentPage = await ctx.newPage();
+recentPage.on('pageerror', (e) => errors.push('recent: ' + e.message));
+await recentPage.goto(`chrome-extension://${id}/recent.html`);
+const onPage = await until(async () => (await recentPage.locator('#recentList .row[data-id]').count()) >= pages.length);
+console.log(first && onPage ? 'OK Recent tab pinned first' : `FAIL Recent tab pinned first: ${JSON.stringify({ first: !!first, onPage })}`);
+
 // the popup opens on Recent, listing the open test pages
 const popup = await ctx.newPage();
 popup.on('console', (m) => { if (m.type() === 'error') errors.push('popup: ' + m.text()); });

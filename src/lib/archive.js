@@ -5,6 +5,7 @@ import { hostOf, isGroupable, lazyUrl, pageKey, realTitle, realUrl } from './url
 import { catForGroup, organize } from './organizer.js';
 import { OTHER_ID } from './categories.js';
 import { closedTabFor } from './closed.js';
+import { isRecentTab } from './recent-tab.js';
 import { groupTitle } from './grouping.js';
 
 export async function runArchive({ dryRun = false } = {}) {
@@ -53,6 +54,7 @@ export async function search(query, limit = 60) {
   const tabs = await chrome.tabs.query({});
   const open = [];
   for (const t of tabs) {
+    if (isRecentTab(t)) continue; // TabSage's own Recent page
     const url = realUrl(t);
     const title = realTitle(t);
     const catId = await catForGroup(t.groupId);

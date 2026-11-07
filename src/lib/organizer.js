@@ -13,6 +13,7 @@ import { sortAll } from './sorter.js';
 import { applyReason, whyOptions } from './reasons.js';
 import { carryUse, planPins, startCooldown } from './usage.js';
 import { heldTabIds } from './recent.js';
+import { isRecentTab } from './recent-tab.js';
 
 // Tab group changes we caused (so they aren't mistaken for the user teaching us).
 export const expectedGroupChange = new Map(); // tabId -> groupId | '*'
@@ -423,7 +424,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   const lastBusy = await activityAt();
   const idleMs = settings.idleMinutes * 60000;
   const quiet = Date.now() - lastBusy >= idleMs;
-  const held = heldTabIds(live, settings.keepRecent);
+  const held = heldTabIds(live.filter((t) => !isRecentTab(t)), settings.keepRecent);
   const looking = await lookingAtNow();
   if (quiet && (await applyPins(st, settings, live, eligible(live), looking, now, held))) live = await chrome.tabs.query({ windowType: 'normal' });
   await rememberPinTabs(st, live);
