@@ -33,7 +33,7 @@ Shortcuts: `Alt+Shift+T` opens search, `Alt+Shift+O` organizes now.
 
 The default is **Strands Decider 2B qwen3.5 v1-2610, 4-bit (q4f16)**, built by this repo's **Build model (q4f16)** workflow and published to [`sauhsoj/strands-decider-2B-qwen3.5-v1-2610-ONNX`](https://huggingface.co/sauhsoj/strands-decider-2B-qwen3.5-v1-2610-ONNX):
 
-1. [strands-labs/strands-decider PR #77](https://github.com/strands-labs/strands-decider/pull/77)'s `prepare_model.py` folds the LoRA into the Qwen3.5 torso and exports the pointer head (`head.safetensors`, `head_config.json`) — the same split its torch-free `HiddenStateEngine` uses.
+1. strands-decider's `prepare_model.py` (added in [PR #77](https://github.com/strands-labs/strands-decider/pull/77)) folds the LoRA into the Qwen3.5 torso and exports the pointer head (`head.safetensors`, `head_config.json`) — the same split its torch-free `HiddenStateEngine` uses.
 2. `model/reference.py` runs the self-test cases through the upstream torch engine (fp32) for exact token positions and reference probabilities.
 3. `model/build_onnx.py` puts the torso into onnx-community's Qwen3.5-2B q4f16 graphs (4-bit, block 32), drops the LM head and appends the pointer head — one fused graph with the same inputs as the v19 build.
 4. `model/parity.py` runs the graph in ONNX Runtime and fails the workflow if token positions differ or a clear answer flips.

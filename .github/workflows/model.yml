@@ -1,5 +1,5 @@
 # Build the newest Strands Decider as a 4-bit WebGPU graph and publish it to Hugging Face.
-# Uses strands-labs/strands-decider PR #77 (torch-free hidden-state engine; prepare_model.py)
+# Uses strands-labs/strands-decider's torch-free hidden-state engine and prepare_model.py (from PR #77, now on main)
 # to fold the LoRA into the torso and export the pointer head, then model/build_onnx.py.
 #
 # Needs a repository secret HF_TOKEN (a Hugging Face token with write access).
@@ -16,7 +16,7 @@ on:
         default: main
       strands_ref:
         description: strands-labs/strands-decider ref that has prepare_model.py
-        default: refs/pull/77/head
+        default: main
       hf_repo:
         description: Hugging Face repo to publish to
         default: sauhsoj/strands-decider-2B-qwen3.5-v1-2610-ONNX
@@ -55,13 +55,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install (versions from PR #77's Lambda Dockerfile)
+      - name: Install (versions from strands-decider's Lambda Dockerfile)
         run: |
           pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
           SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0+ci pip install ./strands-decider transformers==5.20.2
           pip install onnx==1.23.2 onnxruntime==1.31.1 tokenizers hf_transfer
 
-      - name: Fold LoRA into the torso, export the pointer head (PR #77 prepare_model.py)
+      - name: Fold LoRA into the torso, export the pointer head (prepare_model.py)
         run: python strands-decider/deploy/lambda/scripts/prepare_model.py "${{ inputs.model }}" "${{ inputs.revision }}" work
 
       - name: Torch reference for the self-test cases
