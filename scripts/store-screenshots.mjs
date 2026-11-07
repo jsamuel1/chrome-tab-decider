@@ -72,7 +72,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-shots-'));
 fs.mkdirSync(path.join(profile, 'Default'), { recursive: true });
 fs.writeFileSync(path.join(profile, 'Default', 'Preferences'), JSON.stringify({
   vertical_tabs: { enabled: true, enabled_first_time: true, uncollapsed_width: 250 },
-  side_panel: { is_right_aligned: true },
+  side_panel: { is_right_aligned: false }, // the Recent panel next to the tabs
 }));
 const ctx = await chromium.launchPersistentContext(profile, {
   headless: false, channel: 'chromium', viewport: null,
