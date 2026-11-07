@@ -15,7 +15,6 @@
     "favicon",
     "scripting",
     "bookmarks",
-    "sidePanel",
     "sessions"
   ],
   "host_permissions": [
@@ -66,9 +65,6 @@
     "128": "icons/icon128.png"
   },
   "options_page": "options.html",
-  "side_panel": {
-    "default_path": "sidepanel.html"
-  },
   "commands": {
     "organize-now": {
       "suggested_key": {
@@ -80,13 +76,7 @@
       "suggested_key": {
         "default": "Alt+Shift+T"
       },
-      "description": "Open TabSage search"
-    },
-    "open-recent": {
-      "suggested_key": {
-        "default": "Alt+Shift+R"
-      },
-      "description": "Open your recent tabs"
+      "description": "Open TabSage: recent tabs and search"
     }
   },
   "content_security_policy": {

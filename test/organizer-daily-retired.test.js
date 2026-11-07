@@ -1,4 +1,4 @@
-// The Daily group was replaced by the Recent side panel. After the update its tabs are taken out of
+// The Daily group was replaced by the popup's Recent list. After the update its tabs are taken out of
 // the old group once, and the group is not mistaken for one you named yourself.
 import test from 'node:test';
 import assert from 'node:assert/strict';

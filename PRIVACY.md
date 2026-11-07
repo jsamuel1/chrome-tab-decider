@@ -23,7 +23,7 @@ you are using:
   your bookmarks; it never changes them.
 - **How often you use your tabs:** when you last looked at each tab and how
   often you switch to it, so your most-used pages can be kept pinned and your
-  recent and most-used tabs listed in the Recent side panel.
+  recent and most-used tabs listed in TabSage's toolbar menu.
 - **What you tell it:** the profile you fill in when you install it (your
   company and its web addresses, your kind of work, your projects and the
   categories you want), and the reasons you give when you move a tab and
@@ -98,7 +98,6 @@ To remove it:
 | `offscreen` | A background worker cannot reach the graphics card, so a hidden page hosts the model. |
 | `alarms` | Wake up to re-sort, and to close tabs you have stopped using. |
 | `favicon` | Show a saved site icon for a tab that has not been loaded back in yet. |
-| `sidePanel` | Show the Recent side panel, which lists your recent and most-used tabs so you can switch to them. |
 | `sessions` | When you reopen a tab TabSage closed, find it in Chrome's recently closed tabs and restore it, so its Back button still works. Nothing else in that list is used, and nothing is sent anywhere. |
 | `huggingface.co`, `hf.co` | Download the classifier. Nothing is uploaded to them. |
 

@@ -21,7 +21,7 @@ TabSage sorts your open tabs into Chrome's own tab groups, and it does it on you
 • It learns from you. Move a tab to another group and a small card asks why, with one-click answers. Your reasons shape later decisions, and pages you place by hand stay where you put them.
 • New folders found in your own tabs. Distinctive words shared by several of your tabs become candidate folders, checked by the classifier before they are created. You can keep, rename or merge new folders in Settings.
 • A tab bar that holds still. Your most recently used tabs are never moved, so Ctrl+Tab still finds the tab you were just on, and other tabs are only sorted after you have left the tab bar alone for a few minutes.
-• Recent tabs one click away. The Recent side panel (Alt+Shift+R) lists your recent and most-used tabs, and your most-used pages are kept as pinned tabs.
+• Recent tabs one keypress away. TabSage's toolbar menu (Alt+Shift+T) opens on your recent and most-used tabs, and your most-used pages are kept as pinned tabs.
 • Trims tabs you have stopped using. Tabs you have not looked at for a week are closed but stay searchable from the toolbar, and recently closed ones come back with their Back history.
 • Your layout survives restarts. Groups are restored without reloading every tab.
 
@@ -44,7 +44,7 @@ https://github.com/jsamuel1/chrome-tab-decider/issues
 > tabs within easy reach.
 
 Everything else it does serves that purpose: the toolbar search finds tabs it closed for you, the
-Recent side panel lists your recent and most-used tabs, the saved layout puts your groups back after
+toolbar menu lists your recent and most-used tabs, the saved layout puts your groups back after
 Chrome restarts, and onboarding and the "Why?" card tell it how you like your tabs sorted.
 
 ## Permission justifications
@@ -72,7 +72,6 @@ close tabs you have stopped using.
 **`favicon`** — Shows a saved site icon on a placeholder tab that has not been loaded back in yet
 after Chrome restarts.
 
-**`sidePanel`** — Shows the Recent side panel, which lists the user's most recently used and most-used open tabs so they can switch to one with a click or the keyboard. It only reads tab titles and addresses already available through `tabs`, and never sends them anywhere.
 
 **`sessions`** — When the user reopens, from TabSage's search, a tab TabSage closed after it went unused, TabSage looks for that tab in Chrome's recently closed tabs and restores it, so it comes back with its Back history instead of as a fresh tab. Only the entry for that page is used; nothing is read for any other purpose or sent anywhere.
 

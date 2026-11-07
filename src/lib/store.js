@@ -101,7 +101,7 @@ export function migrate(st) {
     if (c.parentId === undefined) c.parentId = null;
     if (c.isNew === undefined) c.isNew = false;
   }
-  // The Daily group was replaced by the Recent side panel: its pages go back to their own folders, and
+  // The Daily group was replaced by the popup's Recent list: its pages go back to their own folders, and
   // the organizer empties the old group once (retiredDaily) so it is not taken for one you named.
   if (st.categories?.daily) {
     delete st.categories.daily;

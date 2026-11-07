@@ -1,4 +1,4 @@
-// Your recent tabs: which ones TabSage keeps still, and what the Recent side panel lists.
+// Your recent tabs: which ones TabSage keeps still, and what the popup lists under Recent.
 
 import { isGroupable, pageKey, realUrl } from './urls.js';
 
@@ -26,7 +26,7 @@ export function heldTabIds(tabs, n) {
 const faded = (e, now, halfLifeDays) => (e ? e.score * 0.5 ** (Math.max(0, now - e.at) / (halfLifeDays * DAY)) : 0);
 
 /**
- * The side panel's two lists: the most recently used tabs, newest first, then the open pages you use
+ * The popup's two lists: the most recently used tabs, newest first, then the open pages you use
  * most that are not already in Recent. Chrome's own pages and extension pages are left out.
  */
 export function recentLists(tabs, usage, now, { recent = 10, used = 10, halfLifeDays = 7 } = {}) {

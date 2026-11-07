@@ -12,7 +12,7 @@ import { modelError } from './engine/models.js';
 import { hostOf, isGroupable, realTitle, realUrl, pageKey } from './lib/urls.js';
 import { recentLists } from './lib/recent.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
-import { isRename, nameFromTitle } from './lib/grouping.js';
+import { groupTitle, isRename, nameFromTitle } from './lib/grouping.js';
 import { cleanDetails, detailsCount, detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
 import { allowed } from './lib/senders.js';
 import { recordUse, pruneUsage } from './lib/usage.js';
@@ -119,10 +119,8 @@ chrome.alarms.onAlarm.addListener(async (a) => {
   }
 });
 
-chrome.commands.onCommand.addListener((cmd, tab) => {
+chrome.commands.onCommand.addListener((cmd) => {
   if (cmd === 'organize-now') organize({ reason: 'shortcut' });
-  // opened straight away: sidePanel.open must run while the shortcut still counts as a user action
-  if (cmd === 'open-recent' && tab) chrome.sidePanel.open({ windowId: tab.windowId }).catch((e) => console.warn('[TabSage] side panel', e.message));
 });
 
 // ---------- tab events
@@ -206,11 +204,11 @@ chrome.tabGroups.onRemoved.addListener((g) => groupCat.delete(g.id));
 
 // ---------- messages from popup / options / offscreen
 const api = {
-  /** The Recent side panel's lists: your most recently used tabs, then the open pages you use most. */
-  async recentLists() {
+  /** The popup's Recent lists: your most recently used tabs, then the open pages you use most. */
+  async recentLists({ recent: nRecent = 10, used: nUsed = 10 } = {}) {
     const st = await getState();
     const tabs = (await chrome.tabs.query({ windowType: 'normal' })).filter((t) => !t.incognito);
-    const { recent, used } = recentLists(tabs, st.usage, Date.now());
+    const { recent, used } = recentLists(tabs, st.usage, Date.now(), { recent: Math.min(20, nRecent), used: Math.min(20, nUsed) });
     const brief = (t) => ({ id: t.id, windowId: t.windowId, title: realTitle(t), url: realUrl(t), active: !!t.active });
     return { recent: recent.map(brief), used: used.map(brief) };
   },
@@ -231,7 +229,8 @@ const api = {
       for (const g of groups) if ((await catForGroup(g.id)) === c.id) gids.push(g.id);
       const n = tabs.filter((t) => gids.includes(t.groupId)).length;
       const domains = Object.entries(st.siteRules).filter(([, r]) => r.catId === c.id).map(([d]) => d);
-      cats.push({ ...c, tabCount: n, groupIds: gids, domains });
+      // title: what the tab group is called, e.g. "Northwind · Atlas" for a work folder named Atlas
+      cats.push({ ...c, title: groupTitle(c, st.profile), tabCount: n, groupIds: gids, domains });
     }
     cats.sort((a, b) => (b.pinned - a.pinned) || (b.tabCount - a.tabCount));
     const ready = !!engine?.downloaded;

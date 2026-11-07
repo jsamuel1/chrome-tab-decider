@@ -6,6 +6,24 @@ let status = null;
 let sel = -1;
 let rows = [];
 
+// Recent and most-used tabs, shown before you type: the quickest way back to the tab you were just on.
+const tabRow = (it, i) => `
+    <div class="row" data-i="${i}">
+      <img src="${esc(faviconFor(it.url))}" alt="" />
+      <span class="t" title="${esc(it.url)}">${esc(it.title || it.url)}</span>
+    </div>`;
+async function showRecent() {
+  const { recent, used } = await bg('recentLists', { recent: 8, used: 5 });
+  // the tab you are on is already in front of you
+  const others = recent.filter((t) => !t.active);
+  rows = [...others, ...used].map((t) => ({ kind: 'open', tabId: t.id, windowId: t.windowId, url: t.url, title: t.title }));
+  $('recentList').innerHTML = others.map((t, i) => tabRow(t, i)).join('') || '<div class="empty">No recent tabs yet</div>';
+  $('usedHead').hidden = !used.length;
+  $('usedList').innerHTML = used.map((t, i) => tabRow(t, i + others.length)).join('');
+  sel = rows.length ? 0 : -1;
+  paintSel();
+}
+
 async function refresh() {
   status = await bg('status');
   $('engine').innerHTML = engineSummary(status);
@@ -15,7 +33,7 @@ async function refresh() {
     ? cats.map((c) => `
       <div class="row" data-cat="${c.id}" data-gid="${c.groupIds[0] ?? ''}">
         <span class="dot" style="background:var(--g-${c.color})"></span>
-        <span class="t">${esc(c.name)}</span>
+        <span class="t">${esc(c.title || c.name)}</span>
         <span class="meta">${c.tabCount} tab${c.tabCount === 1 ? '' : 's'}</span>
         <button class="star ${c.pinned ? 'on' : ''}" data-pin="${c.id}" title="${c.pinned ? 'Unpin group' : 'Pin group to the front'}">${c.pinned ? '★' : '☆'}</button>
       </div>`).join('')
@@ -82,7 +100,7 @@ async function runSearch() {
   const q = $('q').value;
   $('home').hidden = !!q;
   $('results').hidden = !q;
-  if (!q) return;
+  if (!q) return showRecent();
   const r = await bg('search', { query: q });
   const row = (it, i) => `
     <div class="row" data-i="${i}">
@@ -99,9 +117,11 @@ async function runSearch() {
   paintSel();
 }
 
+// The list on screen: search results while you type, otherwise Recent and Most used.
+const listing = () => ($('results').hidden ? '#recentList, #usedList' : '#results');
 function paintSel() {
-  document.querySelectorAll('#results .row').forEach((el) => el.classList.toggle('sel', Number(el.dataset.i) === sel));
-  document.querySelector('#results .row.sel')?.scrollIntoView({ block: 'nearest' });
+  document.querySelectorAll('#results .row, #recentList .row, #usedList .row').forEach((el) => el.classList.toggle('sel', Number(el.dataset.i) === sel));
+  document.querySelector(`${listing().split(', ').map((c) => `${c} .row.sel`).join(', ')}`)?.scrollIntoView({ block: 'nearest' });
 }
 
 async function openRow(i, e) {
@@ -122,9 +142,15 @@ $('results').addEventListener('click', async (e) => {
   const r = e.target.closest('[data-i]');
   if (r) openRow(Number(r.dataset.i), e);
 });
+for (const id of ['recentList', 'usedList']) {
+  $(id).addEventListener('click', (e) => {
+    const r = e.target.closest('[data-i]');
+    if (r) openRow(Number(r.dataset.i), e);
+  });
+}
 
 document.addEventListener('keydown', (e) => {
-  if ($('results').hidden) return;
+  if (!rows.length) return;
   if (e.key === 'ArrowDown') { sel = Math.min(rows.length - 1, sel + 1); paintSel(); e.preventDefault(); }
   if (e.key === 'ArrowUp') { sel = Math.max(0, sel - 1); paintSel(); e.preventDefault(); }
   if (e.key === 'Enter' && sel >= 0) openRow(sel, e);
@@ -139,3 +165,4 @@ chrome.runtime.onMessage.addListener((m) => {
 });
 
 refresh();
+showRecent();

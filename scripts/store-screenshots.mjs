@@ -2,7 +2,7 @@
 // pages for a fictional company, Northwind. Run on a Mac with a display, after `npm run build`:
 //   node scripts/store-screenshots.mjs
 // The browser has no classifier, so the tab groups are created here, with the titles and colours
-// TabSage gives them. The extension pages (Recent side panel, "Why?" card, onboarding, Settings) are real,
+// TabSage gives them. The extension pages (the popup's Recent list, "Why?" card, onboarding, Settings) are real,
 // and the window uses Chrome's vertical tabs, the layout TabSage suggests.
 // Writes docs/store/screenshot-*.png. Needs Playwright (npm install --no-save playwright@1) and, for
 // screencapture, Screen Recording permission for the terminal.
@@ -72,7 +72,6 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-shots-'));
 fs.mkdirSync(path.join(profile, 'Default'), { recursive: true });
 fs.writeFileSync(path.join(profile, 'Default', 'Preferences'), JSON.stringify({
   vertical_tabs: { enabled: true, enabled_first_time: true, uncollapsed_width: 250 },
-  side_panel: { is_right_aligned: false }, // the Recent panel next to the tabs
 }));
 const ctx = await chromium.launchPersistentContext(profile, {
   headless: false, channel: 'chromium', viewport: null,
@@ -149,8 +148,7 @@ async function capture(name) {
   console.log('wrote', path.relative(process.cwd(), file));
 }
 
-// 1. tab groups with the Recent side panel open. sidePanel.open needs a real click on an extension
-// page, so a temporary one is opened in the window, clicked, and closed again.
+// 1. the tab groups, down the side
 const mainWindow = await api((u) => chrome.tabs.query({}).then((ts) => ts.find((t) => t.url === u).windowId), url('tracker.northwind.localhost/ATLAS-142'));
 const inMain = async (file) => {
   const next = ctx.waitForEvent('page');
@@ -159,21 +157,28 @@ const inMain = async (file) => {
   await p.waitForLoadState();
   return p;
 };
-const opener = await inMain('options.html');
-await opener.evaluate((w) => {
-  const b = document.createElement('button');
-  b.id = 'openPanel';
-  b.textContent = 'open';
-  b.onclick = () => chrome.sidePanel.open({ windowId: w });
-  document.body.prepend(b);
-}, mainWindow);
-await opener.click('#openPanel');
-await wait(800);
-await opener.close();
 await activate('tracker.northwind.localhost/ATLAS-142');
-await capture('screenshot-1-groups-and-recent');
+await capture('screenshot-1-groups');
 
-// 2. the "Why?" card: move a tab into another group by hand
+// 2. the toolbar menu, which opens on your recent and most-used tabs
+await activate('wiki.northwind.localhost/atlas/architecture');
+await wait(300);
+await activate('tracker.northwind.localhost/ATLAS-142');
+// Chrome only shows the popup for the focused window, and focus can take a moment to arrive
+let opened = '';
+for (let i = 0; i < 6 && opened !== 'ok'; i++) {
+  opened = await api(async (w) => {
+    await chrome.windows.update(w, { focused: true });
+    return chrome.action.openPopup({ windowId: w }).then(() => 'ok', (e) => e.message);
+  }, mainWindow);
+  if (opened !== 'ok') await wait(500);
+}
+if (opened !== 'ok') throw new Error(`could not open the toolbar menu: ${opened}`);
+await wait(1200);
+await capture('screenshot-2-recent');
+
+
+// 3. the "Why?" card: move a tab into another group by hand
 await activate('wiki.northwind.localhost/handbook/leave');
 await wait(400);
 await api(async ([id, title]) => {
@@ -181,16 +186,16 @@ await api(async ([id, title]) => {
   await chrome.tabs.group({ tabIds: [id], groupId: g.id });
 }, [await tabId('wiki.northwind.localhost/handbook/leave'), 'Northwind · Payroll']);
 await wait(1500);
-await capture('screenshot-2-why-card');
+await capture('screenshot-3-why-card');
 
-// 3. onboarding, on the projects step with answers filled in
+// 4. onboarding, on the projects step with answers filled in
 const onboard = await inMain('onboarding.html');
 await onboard.fill('#company', 'Northwind');
 await onboard.click('#next');
 await onboard.fill('#work', 'an engineering lead on billing and payroll');
 await onboard.click('#next');
 await onboard.fill('#projects', 'Atlas\nPayroll');
-await capture('screenshot-3-onboarding');
+await capture('screenshot-4-onboarding');
 
 // 5. onboarding's offer of Chrome's vertical tabs
 for (let i = 0; i < 3; i++) await onboard.click('#next'); // projects → style → categories → layout
@@ -198,11 +203,6 @@ await onboard.waitForSelector('section[data-step="layout"]:not([hidden])');
 await capture('screenshot-5-vertical-tabs');
 await onboard.close();
 
-// 4. Settings: your profile and the folders TabSage found
-const settingsPage = await inMain('options.html');
-await wait(800);
-await capture('screenshot-4-settings');
-await settingsPage.close();
 
 await ctx.close();
 server.close();

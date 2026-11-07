@@ -96,16 +96,16 @@ console.log('search', JSON.stringify((await call('search', { query: 'espresso' }
 const lazy = await ctx.newPage();
 await lazy.goto(`chrome-extension://${id}/lazy.html#u=${encodeURIComponent('http://news.localhost:8099/?t=Later')}&t=Saved%20title&f=`);
 console.log('lazy title', await lazy.title());
-// the Recent side panel lists the open test pages, and switching from it works
-const panel = await ctx.newPage();
-panel.on('console', (m) => { if (m.type() === 'error') errors.push('panel: ' + m.text()); });
-panel.on('pageerror', (e) => errors.push('panel: ' + e.message));
-await panel.goto(`chrome-extension://${id}/sidepanel.html`);
+// the popup opens on Recent, listing the open test pages
+const popup = await ctx.newPage();
+popup.on('console', (m) => { if (m.type() === 'error') errors.push('popup: ' + m.text()); });
+popup.on('pageerror', (e) => errors.push('popup: ' + e.message));
+await popup.goto(`chrome-extension://${id}/popup.html`);
 const listed = await until(async () => {
-  const n = await panel.locator('#recentList .row[data-id]').count();
+  const n = await popup.locator('#recentList .row[data-i]').count();
   return n >= pages.length && n;
 });
-console.log(listed ? 'OK recent panel lists open tabs' : `FAIL recent panel lists ${await panel.locator('#recentList .row[data-id]').count()} of ${pages.length} tabs`);
+console.log(listed ? 'OK popup lists recent tabs' : `FAIL popup lists ${await popup.locator('#recentList .row[data-i]').count()} of ${pages.length} recent tabs`);
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no console errors');
 await ctx.close();
 server.close();

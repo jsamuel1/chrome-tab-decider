@@ -28,7 +28,7 @@ test('Recent lists tabs newest first; Most used ranks the rest by faded use', ()
 
 test('extension and chrome pages are left out of both lists', () => {
   const now = 1_000_000_000_000;
-  const tabs = [tab(1, 1, now, { url: 'chrome://settings' }), tab(2, 1, now - 1, { url: 'chrome-extension://x/sidepanel.html' }), tab(3, 1, now - 2)];
+  const tabs = [tab(1, 1, now, { url: 'chrome://settings' }), tab(2, 1, now - 1, { url: 'chrome-extension://x/popup.html' }), tab(3, 1, now - 2)];
   const { recent } = recentLists(tabs, {}, now, { recent: 5, used: 5 });
   assert.deepEqual(recent.map((t) => t.id), [3]);
 });

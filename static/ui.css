@@ -73,8 +73,3 @@ th { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weigh
 .check[hidden] { display: none; }
 textarea { resize: vertical; }
 
-/* Recent side panel */
-body.sidepanel { margin: 0; }
-.sidepanel .row.current .t { font-weight: 600; }
-.sidepanel .row:focus { outline: 2px solid var(--accent, #4c8bf5); outline-offset: -2px; background: var(--hover); }
-.sidepanel .hint { margin: 12px; }

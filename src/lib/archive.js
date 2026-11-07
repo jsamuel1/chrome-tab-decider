@@ -5,6 +5,7 @@ import { hostOf, isGroupable, lazyUrl, pageKey, realTitle, realUrl } from './url
 import { catForGroup, organize } from './organizer.js';
 import { OTHER_ID } from './categories.js';
 import { closedTabFor } from './closed.js';
+import { groupTitle } from './grouping.js';
 
 export async function runArchive({ dryRun = false } = {}) {
   const settings = await getSettings();
@@ -32,7 +33,7 @@ export async function runArchive({ dryRun = false } = {}) {
       if (existing.has(url)) s.archive = s.archive.filter((a) => a.url !== url);
       s.archive.unshift({
         id: uid('a'), url, title: realTitle(t), favIconUrl: t.favIconUrl || '',
-        domain: hostOf(url), catName: cat?.name || '',
+        domain: hostOf(url), catName: cat ? groupTitle(cat, s.profile) : '',
         archivedAt: Date.now(), lastAccessed: last,
       });
       delete s.tabMeta[pageKey(url)];
@@ -55,7 +56,9 @@ export async function search(query, limit = 60) {
     const url = realUrl(t);
     const title = realTitle(t);
     const catId = await catForGroup(t.groupId);
-    const catName = st.categories[catId]?.name || '';
+    // the name the tab group shows, e.g. "Northwind · Atlas"
+    const cat = st.categories[catId];
+    const catName = cat ? groupTitle(cat, st.profile) : '';
     if (!q || match(`${title} ${url} ${catName}`.toLowerCase())) {
       open.push({ kind: 'open', tabId: t.id, windowId: t.windowId, url, title, favIconUrl: t.favIconUrl, catName });
     }
