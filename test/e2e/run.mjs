@@ -118,6 +118,24 @@ const listed = await until(async () => {
   return n >= pages.length && n;
 });
 console.log(listed ? 'OK popup lists recent tabs' : `FAIL popup lists ${await popup.locator('#recentList .row[data-i]').count()} of ${pages.length} recent tabs`);
+
+// Settings: an export, imported into a reset copy, brings back the profile and reasons
+const opts = await ctx.newPage();
+opts.on('pageerror', (e) => errors.push('options: ' + e.message));
+await opts.goto(`chrome-extension://${id}/options.html`);
+const exported = await opts.evaluate(async () => {
+  const send = (type, p = {}) => chrome.runtime.sendMessage({ target: 'background', type, ...p }).then((r) => r.result);
+  await send('saveProfile', { profile: { company: 'Northwind', companyDomains: ['northwind.com'], work: '', projects: [], style: 'specific-work', categories: [], onboarded: true } });
+  return send('exportData');
+});
+await opts.evaluate(() => chrome.storage.local.set({ state: {} }));
+opts.on('dialog', (d) => d.accept());
+await opts.setInputFiles('#importFile', { name: 'tabsage-export.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
+const imported = await until(async () => /Imported/.test(await opts.locator('#dataMsg').textContent()));
+const company = await opts.evaluate(async () => (await chrome.storage.local.get('state')).state?.profile?.company);
+console.log(imported && company === 'Northwind' && exported.format === 'tabsage'
+  ? 'OK settings export imports'
+  : `FAIL settings import: ${JSON.stringify({ imported, company, msg: await opts.locator('#dataMsg').textContent() })}`);
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no console errors');
 await ctx.close();
 server.close();

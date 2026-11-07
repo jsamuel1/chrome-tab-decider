@@ -1,6 +1,6 @@
 // TabSage service worker: wires Chrome events to the organizer, sorter, persistence and archive.
 
-import { getSettings, setSettings, getState, updateState, flushState, regroups, DEFAULT_SETTINGS } from './lib/store.js';
+import { getSettings, setSettings, getState, updateState, flushState, regroups, fromExport, replaceState, EXPORT_FORMAT, DEFAULT_SETTINGS } from './lib/store.js';
 import { organize, learnFromUser, expectedGroupChange, clearManual, catForGroup, groupCat, markActivity, saveWhy, whyQuestion, noteTabClosed, noteUnpinned, notePinnedNavigated } from './lib/organizer.js';
 import { deleteReason as removeReason } from './lib/reasons.js';
 import { reviewFolder as review } from './lib/review.js';
@@ -375,8 +375,19 @@ const api = {
   modelReady: () => organize({ reason: 'model-ready' }),
   async unloadModel() { await closeOffscreen(); },
   async exportData() {
+    await flushState();
     const { settings, state } = await chrome.storage.local.get(['settings', 'state']);
-    return { settings, state: { ...state, tabMeta: undefined } };
+    return { format: EXPORT_FORMAT, version: 1, exportedAt: Date.now(), settings, state: { ...state, tabMeta: undefined, snapshot: undefined } };
+  },
+  // Replaces settings, folders, reasons and archive with those in an export, then sorts the open tabs again.
+  async importData({ data }) {
+    const { settings, state } = fromExport(data);
+    await chrome.storage.local.set({ settings });
+    await replaceState(state);
+    groupCat.clear();
+    await organize({ reason: 'import' });
+    scheduleSnapshot(300);
+    return { folders: Object.keys(state.categories).length, reasons: state.reasons.length };
   },
   async resetAll() {
     await chrome.storage.local.clear();

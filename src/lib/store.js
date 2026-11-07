@@ -136,8 +136,38 @@ export function migrate(st) {
   return st;
 }
 
+export const EXPORT_FORMAT = 'tabsage';
+
+// What an import brings across. tabMeta (details of pages open in a tab) and snapshot (the window
+// layout) belong to the browser session the file was made in, so they start empty.
+const IMPORTED_STATE = ['categories', 'pageMap', 'siteRules', 'reasons', 'usage', 'ourPins', 'pinCooldown',
+  'profile', 'archive', 'lastDiscovery', 'stats', 'retiredDaily', 'schemaVersion', 'domainMap'];
+
+const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** The settings and state in a Settings export, ready to save. Throws if `data` is not a TabSage export. */
+export function fromExport(data) {
+  const ok = isObject(data) && isObject(data.settings) && isObject(data.state)
+    && (data.format === undefined || data.format === EXPORT_FORMAT);
+  if (!ok) throw new Error('This file is not a TabSage export.');
+  const settings = { ...DEFAULT_SETTINGS };
+  for (const k of Object.keys(DEFAULT_SETTINGS)) {
+    if (k in data.settings && typeof data.settings[k] === typeof DEFAULT_SETTINGS[k]) settings[k] = data.settings[k];
+  }
+  const state = structuredClone(DEFAULT_STATE);
+  for (const k of IMPORTED_STATE) if (k in data.state) state[k] = structuredClone(data.state[k]);
+  return { settings: cleanSettings(settings), state: migrate(state) };
+}
+
 let cached = null;
 let writeTimer = null;
+
+/** Replace all saved state, e.g. from an import. */
+export async function replaceState(st) {
+  clearTimeout(writeTimer);
+  cached = st;
+  await chrome.storage.local.set({ state: st });
+}
 
 export async function getState() {
   if (cached) return cached;

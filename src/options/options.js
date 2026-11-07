@@ -271,6 +271,22 @@ $('export').onclick = async () => {
   a.download = 'tabsage-export.json';
   a.click();
 };
+$('import').onclick = () => $('importFile').click();
+$('importFile').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { $('dataMsg').textContent = 'That file is not JSON.'; return; }
+  if (!confirm(`Replace your TabSage settings, folders, reasons and archive with those in ${file.name}?`)) return;
+  try {
+    const r = await bg('importData', { data });
+    $('dataMsg').textContent = `Imported ${r.folders} folder(s) and ${r.reasons} reason(s).`;
+    load();
+  } catch (err) {
+    $('dataMsg').textContent = err.message || String(err);
+  }
+};
 $('reset').onclick = async () => {
   if (confirm('Reset all TabSage settings, folders and archive?')) await bg('resetAll');
 };
