@@ -123,6 +123,8 @@ jobs:
         env:
           SUBMIT: ${{ !contains(github.ref_name, '-') }}
         run: |
+          # the Store does not accept a manifest "key"; it is only there to fix the ID of unpacked builds
+          node -e 'const f="ext/manifest.json",m=JSON.parse(require("fs").readFileSync(f));delete m.key;require("fs").writeFileSync(f,JSON.stringify(m,null,2))'
           (cd ext && zip -qr ../extension.zip .)
           TOKEN=$(curl -fsS https://oauth2.googleapis.com/token \
             --data-urlencode client_id="$CLIENT_ID" --data-urlencode client_secret="$CLIENT_SECRET" \

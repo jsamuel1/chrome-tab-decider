@@ -1,6 +1,7 @@
 // Bundles the extension into dist/ (load it via chrome://extensions → Load unpacked → dist).
 import * as esbuild from 'esbuild';
-import { cpSync, mkdirSync, rmSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { extensionId, readKey } from './extension-key.mjs';
 
 const watch = process.argv.includes('--watch');
 rmSync('dist', { recursive: true, force: true });
@@ -19,6 +20,13 @@ if (release) {
   if (!release.startsWith(`${maj}.${min}.`)) throw new Error(`release ${release} does not match package.json ${maj}.${min}`);
 }
 manifest.version = release || `${maj}.${min}.${process.env.BUILD_NUMBER || 0}`;
+// A fixed ID: with the Store item's public key, every unpacked copy gets the Store's ID, so loading a
+// new build from another folder keeps your settings. The Store upload removes the key again.
+rmSync('dist/extension-key.txt', { force: true });
+if (existsSync('static/extension-key.txt')) {
+  manifest.key = readKey(readFileSync('static/extension-key.txt', 'utf8'));
+  console.log(`extension ID ${extensionId(manifest.key)}`);
+}
 writeFileSync('dist/manifest.json', JSON.stringify(manifest, null, 2));
 
 // ONNX Runtime Web WebGPU build loads this wasm at runtime from the extension package.
