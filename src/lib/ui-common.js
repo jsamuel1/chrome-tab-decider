@@ -16,6 +16,10 @@ export async function engine(type, payload = {}) {
   return r.result;
 }
 
+/** Chrome's own Appearance settings, where Tab position and Side panel position are set. Extensions
+ * cannot change those settings themselves, so TabSage only opens the page. */
+export const openAppearanceSettings = () => chrome.tabs.create({ url: 'chrome://settings/appearance' });
+
 export const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 

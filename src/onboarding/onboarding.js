@@ -1,4 +1,4 @@
-import { bg, esc, progressText } from '../lib/ui-common.js';
+import { openAppearanceSettings, bg, esc, progressText } from '../lib/ui-common.js';
 import { withoutNames } from '../lib/onboarding.js';
 
 const $ = (id) => document.getElementById(id);
@@ -108,6 +108,7 @@ $('company').addEventListener('input', () => {
   }
 });
 $('openSettings').onclick = () => chrome.runtime.openOptionsPage();
+$('openAppearance').onclick = () => openAppearanceSettings();
 
 async function load() {
   const [status, sug] = await Promise.all([bg('status').catch(() => null), bg('onboardingSuggestions').catch(() => ({ domains: [], categories: [] }))]);

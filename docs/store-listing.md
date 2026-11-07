@@ -17,7 +17,7 @@ in already):
 ```
 TabSage sorts your open tabs into Chrome's own tab groups, and it does it on your computer: the classifier that decides where each tab belongs runs inside your browser, and nothing you browse ever leaves it.
 
-• Groups that match how you work. Tell TabSage where you work, what you do and which projects or customers you have, and work tabs are grouped by project ("Amazon · Acme") while personal tabs are grouped by topic.
+• Groups that match how you work. Tell TabSage where you work, what you do and which projects or customers you have, and work tabs are grouped by project ("Northwind · Atlas") while personal tabs are grouped by topic.
 • It learns from you. Move a tab to another group and a small card asks why, with one-click answers. Your reasons shape later decisions, and pages you place by hand stay where you put them.
 • New folders found in your own tabs. Distinctive words shared by several of your tabs become candidate folders, checked by the classifier before they are created. You can keep, rename or merge new folders in Settings.
 • A tab bar that holds still. Your most recently used tabs are never moved, so Ctrl+Tab still finds the tab you were just on, and other tabs are only sorted after you have left the tab bar alone for a few minutes.
@@ -30,8 +30,9 @@ Private by design: TabSage reads only each page's title, description, site name,
 Needs Chrome 138 or later. The classifier runs best on a graphics card with WebGPU (shader-f16).
 ```
 
-**Images you upload yourself:** the 128 × 128 store icon (`static/icons/icon128.png`), at least one
-1280 × 800 screenshot, and the 440 × 280 small promo tile.
+**Images you upload yourself:** the 128 × 128 store icon (`static/icons/icon128.png`), the 1280 × 800
+screenshots in `docs/store/` (made by `node scripts/store-screenshots.mjs`, in Chrome's vertical-tab
+layout with sample pages for a fictional company), and the 440 × 280 small promo tile.
 
 **Homepage URL:** https://github.com/jsamuel1/chrome-tab-decider · **Support URL:**
 https://github.com/jsamuel1/chrome-tab-decider/issues

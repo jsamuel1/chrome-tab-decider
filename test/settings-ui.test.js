@@ -88,3 +88,15 @@ test('a folder can be placed under the company or a category in Settings', () =>
   assert.equal(st.categories.co.kind, 'company', 'the company folder was moved');
   assert.match(js, /action: 'place'/);
 });
+
+test('onboarding and Settings offer Chrome\'s vertical tabs, and open its appearance settings to change them', () => {
+  const onboarding = readFileSync(new URL('../static/onboarding.html', import.meta.url), 'utf8');
+  const steps = [...onboarding.matchAll(/data-step="([a-z]+)"/g)].map((m) => m[1]);
+  assert.ok(steps.indexOf('layout') === steps.length - 2, `the layout step should come just before All set: ${steps}`);
+  for (const page of [onboarding, html]) {
+    assert.match(page, /id="openAppearance"/);
+    assert.match(page, /Tab position/);
+  }
+  const common = readFileSync(new URL('../src/lib/ui-common.js', import.meta.url), 'utf8');
+  assert.match(common, /chrome:\/\/settings\/appearance/);
+});

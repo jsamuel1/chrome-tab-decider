@@ -15,7 +15,7 @@
         <h2>Where do you work?</h2>
         <div class="field">
           <label for="company">Company</label>
-          <input type="text" id="company" placeholder="e.g. Amazon" />
+          <input type="text" id="company" placeholder="e.g. Northwind" />
         </div>
         <div class="field">
           <label>Its web domains</label>
@@ -40,7 +40,7 @@
         <div class="field">
           <label for="projects">One per line (optional)</label>
           <textarea id="projects" rows="5" placeholder="Acme&#10;Payroll"></textarea>
-          <div class="help">Each one becomes a folder, shown as a group named after your company, such as "Amazon · Acme".</div>
+          <div class="help">Each one becomes a folder, shown as a group named after your company, such as "Northwind · Atlas".</div>
         </div>
       </section>
 
@@ -60,6 +60,19 @@
           <input type="text" id="newCategory" placeholder="Add your own…" />
           <button type="button" id="addCategory">Add</button>
         </div>
+      </section>
+
+      <section class="step card" data-step="layout" hidden>
+        <h2>Put your tabs down the side</h2>
+        <div>TabSage works best with Chrome's tabs down the side of the window, where every group and the tabs in it stay in view, and the Recent side panel (Alt+Shift+R) beside the page.</div>
+        <ul class="small">
+          <li>Set <b>Tab position</b> to show tabs on the side.</li>
+          <li>Set <b>Side panel position</b> to whichever side you want the Recent panel on.</li>
+        </ul>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button type="button" id="openAppearance">Open Chrome's appearance settings</button>
+        </div>
+        <div class="muted small" style="margin-top:8px">Chrome only lets you change these yourself, so TabSage opens the page for you. You can skip this step.</div>
       </section>
 
       <section class="step card" data-step="done" hidden>

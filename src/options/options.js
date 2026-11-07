@@ -1,4 +1,4 @@
-import { bg, engine, esc, fmtBytes, progressText } from '../lib/ui-common.js';
+import { openAppearanceSettings, bg, engine, esc, fmtBytes, progressText } from '../lib/ui-common.js';
 import { describeReason, newestFirst } from '../lib/reasons.js';
 import { MODELS } from '../engine/models.js';
 import { llmAvailability, prepareLLM } from '../engine/llm.js';
@@ -74,6 +74,7 @@ $('saveProfile').onclick = async () => {
   }
   $('saveProfile').disabled = false;
 };
+$('openAppearance').onclick = () => openAppearanceSettings();
 $('rerunOnboarding').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
 
 async function modelStatus() {
