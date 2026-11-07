@@ -52,6 +52,7 @@ jobs:
           grep -q "OK no tabs grouped before the classifier is ready" e2e.log
           grep -q "OK page details stored for open tabs" e2e.log
           grep -q "OK onboarding opened on install" e2e.log
+          grep -q "OK recent panel lists open tabs" e2e.log
           grep -q "no console errors" e2e.log
 
       - name: Package

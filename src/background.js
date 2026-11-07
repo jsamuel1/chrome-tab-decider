@@ -9,7 +9,8 @@ import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
 import { runArchive, search, reopenArchived, deleteArchived } from './lib/archive.js';
 import { ai, closeOffscreen, ensureOffscreen, unloadIfIdle } from './lib/ai.js';
 import { modelError } from './engine/models.js';
-import { hostOf, isGroupable, realUrl, pageKey } from './lib/urls.js';
+import { hostOf, isGroupable, realTitle, realUrl, pageKey } from './lib/urls.js';
+import { recentLists } from './lib/recent.js';
 import { OTHER_ID, mergeCategories } from './lib/categories.js';
 import { isRename, nameFromTitle } from './lib/grouping.js';
 import { cleanDetails, detailsCount, detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
@@ -31,7 +32,9 @@ const scheduleOrganize = (reason, ms = 1500) => debounce('organize', ms, () => o
 const scheduleSnapshot = (ms = 1500) => debounce('snapshot', ms, () => snapshot());
 const scheduleSort = async () => {
   const s = await getSettings();
-  debounce('sort', s.sortDelaySec * 1000, () => sortAll().then(() => scheduleSnapshot()));
+  // Sorting waits until the tab bar has been left alone. An alarm, not a timer: the worker is stopped
+  // long before minutes pass. Each new event moves the alarm on, and sortAll checks again when it fires.
+  chrome.alarms.create('sort-quiet', { when: Date.now() + s.idleMinutes * 60000 + 5000 });
 };
 // Page details and last-used times are only kept while the page is open in a tab.
 const scheduleTidy = (ms = 5000) => debounce('tidy', ms, async () => {
@@ -108,14 +111,18 @@ chrome.alarms.onAlarm.addListener(async (a) => {
     if (!startingUp) snapshot();
   } else if (a.name === 'organize-quiet' || a.name === 'organize-more') {
     organize({ reason: a.name });
+  } else if (a.name === 'sort-quiet') {
+    sortAll().then(() => scheduleSnapshot());
   } else if (a.name === 'idle') {
     const s = await getSettings();
     unloadIfIdle(s.idleUnloadMin).catch(() => {});
   }
 });
 
-chrome.commands.onCommand.addListener((cmd) => {
+chrome.commands.onCommand.addListener((cmd, tab) => {
   if (cmd === 'organize-now') organize({ reason: 'shortcut' });
+  // opened straight away: sidePanel.open must run while the shortcut still counts as a user action
+  if (cmd === 'open-recent' && tab) chrome.sidePanel.open({ windowId: tab.windowId }).catch((e) => console.warn('[TabSage] side panel', e.message));
 });
 
 // ---------- tab events
@@ -199,6 +206,14 @@ chrome.tabGroups.onRemoved.addListener((g) => groupCat.delete(g.id));
 
 // ---------- messages from popup / options / offscreen
 const api = {
+  /** The Recent side panel's lists: your most recently used tabs, then the open pages you use most. */
+  async recentLists() {
+    const st = await getState();
+    const tabs = (await chrome.tabs.query({ windowType: 'normal' })).filter((t) => !t.incognito);
+    const { recent, used } = recentLists(tabs, st.usage, Date.now());
+    const brief = (t) => ({ id: t.id, windowId: t.windowId, title: realTitle(t), url: realUrl(t), active: !!t.active });
+    return { recent: recent.map(brief), used: used.map(brief) };
+  },
   async status() {
     const settings = await getSettings();
     const st = await getState();

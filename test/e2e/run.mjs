@@ -96,6 +96,16 @@ console.log('search', JSON.stringify((await call('search', { query: 'espresso' }
 const lazy = await ctx.newPage();
 await lazy.goto(`chrome-extension://${id}/lazy.html#u=${encodeURIComponent('http://news.localhost:8099/?t=Later')}&t=Saved%20title&f=`);
 console.log('lazy title', await lazy.title());
+// the Recent side panel lists the open test pages, and switching from it works
+const panel = await ctx.newPage();
+panel.on('console', (m) => { if (m.type() === 'error') errors.push('panel: ' + m.text()); });
+panel.on('pageerror', (e) => errors.push('panel: ' + e.message));
+await panel.goto(`chrome-extension://${id}/sidepanel.html`);
+const listed = await until(async () => {
+  const n = await panel.locator('#recentList .row[data-id]').count();
+  return n >= pages.length && n;
+});
+console.log(listed ? 'OK recent panel lists open tabs' : `FAIL recent panel lists ${await panel.locator('#recentList .row[data-id]').count()} of ${pages.length} tabs`);
 console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no console errors');
 await ctx.close();
 server.close();

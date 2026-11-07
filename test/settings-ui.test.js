@@ -1,4 +1,4 @@
-// Settings: the pinned and Daily limits can be changed, its words match what TabSage does, reasons
+// Settings: the pinned, recent-tab and idle limits can be changed, its words match what TabSage does, reasons
 // say what they are about, folders can be placed, and merging asks first.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,12 +12,13 @@ const { reviewFolder } = await import('../src/lib/review.js');
 const html = readFileSync(new URL('../static/options.html', import.meta.url), 'utf8');
 const js = readFileSync(new URL('../src/options/options.js', import.meta.url), 'utf8');
 
-test('Settings has controls for the pinned and Daily limits, which regroup tabs and stay in range', () => {
-  for (const k of ['pinnedMax', 'dailyMax']) assert.match(html, new RegExp(`<input type="number" id="${k}" data-key="${k}"`));
-  assert.ok(regroups({ pinnedMax: 3 }) && regroups({ dailyMax: 0 }) && regroups({ maxGroups: 6 }));
+test('Settings has controls for pins, recent tabs and the idle wait, which stay in range', () => {
+  for (const k of ['pinnedMax', 'keepRecent', 'idleMinutes']) assert.match(html, new RegExp(`<input type="number" id="${k}" data-key="${k}"`));
+  for (const gone of ['dailyMax', 'sortDelaySec', 'Daily']) assert.ok(!html.includes(gone), `options.html still has ${gone}`);
+  assert.ok(regroups({ pinnedMax: 3 }) && regroups({ keepRecent: 0 }) && regroups({ maxGroups: 6 }));
   assert.equal(regroups({ tabSort: 'mru' }), false);
-  assert.deepEqual(cleanSettings({ pinnedMax: -2, dailyMax: 4.6 }), { pinnedMax: 0, dailyMax: 5 });
-  assert.deepEqual(cleanSettings({ pinnedMax: 99, dailyMax: 'x' }), { pinnedMax: 20, dailyMax: 8 });
+  assert.deepEqual(cleanSettings({ pinnedMax: -2, keepRecent: 4.6, idleMinutes: 0 }), { pinnedMax: 0, keepRecent: 5, idleMinutes: 1 });
+  assert.deepEqual(cleanSettings({ pinnedMax: 99, keepRecent: 'x', idleMinutes: 999 }), { pinnedMax: 20, keepRecent: 5, idleMinutes: 60 });
   assert.deepEqual(cleanSettings({ tabSort: 'mru' }), { tabSort: 'mru' });
 });
 

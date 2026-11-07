@@ -25,39 +25,37 @@ test('pruneUsage drops pages whose use has faded away', () => {
 
 test('a page used 20 times last week outranks one used 30 times two months ago', () => {
   const usage = { ...uses('recent', 20, now - 7 * DAY), ...uses('stale', 30, now - 60 * DAY) };
-  const plan = planPins([page('stale'), page('recent')], usage, { now, pinMax: 1, dailyMax: 0 });
+  const plan = planPins([page('stale'), page('recent')], usage, { now, pinMax: 1 });
   assert.deepEqual(plan.pin, ['recent']);
 });
 
-test('the top five pages become pins and the next eight go in Daily', () => {
+test('the top five pages become pins', () => {
   const keys = 'abcdefghijklmnop'.split('');
   let usage = {};
   keys.forEach((k, i) => { usage = uses(k, 20 - i, now, usage); });
   const plan = planPins(keys.map((k) => page(k)), usage, { now });
   assert.deepEqual(plan.pin, keys.slice(0, 5));
-  assert.deepEqual(plan.daily, keys.slice(5, 13));
   assert.deepEqual(plan.unpin, []);
 });
 
 test('pages never used are not pinned', () => {
-  assert.deepEqual(planPins([page('a')], {}, { now }), { pin: [], unpin: [], daily: [] });
+  assert.deepEqual(planPins([page('a')], {}, { now }), { pin: [], unpin: [] });
 });
 
 test('the user\'s own pins are never unpinned, and take up a pinned slot', () => {
   const usage = { ...uses('mine', 1, now), ...uses('x', 50, now), ...uses('y', 40, now) };
   const open = [page('mine', { pinned: true, userPinned: true }), page('x'), page('y')];
-  const plan = planPins(open, usage, { now, pinMax: 2, dailyMax: 0 });
+  const plan = planPins(open, usage, { now, pinMax: 2 });
   assert.deepEqual(plan.unpin, []);
   assert.deepEqual(plan.pin, ['x']);
 });
 
-test('a pin of ours that falls out of the top is unpinned and moves to Daily', () => {
+test('a pin of ours that falls out of the top is unpinned', () => {
   const usage = { ...uses('old', 1, now), ...uses('a', 30, now), ...uses('b', 25, now) };
   const open = [page('old', { pinned: true }), page('a'), page('b')];
   const plan = planPins(open, usage, { now, pinMax: 2, ourPins: { old: now - DAY } });
   assert.deepEqual(plan.pin, ['a', 'b']);
   assert.deepEqual(plan.unpin, ['old']);
-  assert.deepEqual(plan.daily, ['old']);
 });
 
 test('a page in its cooldown is not pinned until the cooldown ends', () => {
@@ -83,15 +81,9 @@ test('a challenger 10% ahead does not displace a holder; 30% ahead does', () => 
   assert.deepEqual([far.pin, far.unpin], [['challenger'], ['holder']]);
 });
 
-test('the same hold applies to a Daily slot', () => {
-  const usage = { ...uses('holder', 10, now), ...uses('challenger', 11, now) };
-  const open = [page('holder', { inDaily: true }), page('challenger')];
-  assert.deepEqual(planPins(open, usage, { now, pinMax: 0, dailyMax: 1 }).daily, ['holder']);
-});
-
 test('two tabs on one page count once', () => {
   const usage = uses('a', 5, now);
-  const plan = planPins([page('a'), page('a', { tabId: 99 })], usage, { now, pinMax: 2, dailyMax: 0 });
+  const plan = planPins([page('a'), page('a', { tabId: 99 })], usage, { now, pinMax: 2 });
   assert.deepEqual(plan.pin, ['a']);
 });
 

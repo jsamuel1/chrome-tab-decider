@@ -11,7 +11,6 @@ const cats = [
   { id: 'acme', name: 'Acme', kind: 'work', parentId: 'co' },
   { id: 'pay', name: 'Payroll', kind: 'work', parentId: 'co' },
   { id: 'trav', name: 'Travel', kind: 'personal', parentId: null },
-  { id: 'daily', name: 'Daily', kind: 'personal', parentId: null },
 ];
 
 test('groupTitle prefixes work folders with the company', () => {
@@ -31,11 +30,10 @@ test('isRename tells a user rename from a title TabSage gave under an earlier co
   assert.equal(isRename(acme, 'Widgets', { company: 'AWS' }), true);
 });
 
-test('planGroups folds the lowest ranked into the parent and keeps Daily out of the count', () => {
-  const counts = new Map([['co', 5], ['acme', 4], ['pay', 1], ['trav', 3], ['daily', 8]]);
+test('planGroups folds the lowest ranked into the parent', () => {
+  const counts = new Map([['co', 5], ['acme', 4], ['pay', 1], ['trav', 3]]);
   const plan = planGroups(cats, counts, 3);
   assert.equal(plan.get('pay'), 'co');
-  assert.equal(plan.get('daily'), 'daily');
   assert.equal(plan.get('trav'), 'trav');
   assert.equal(plan.get('acme'), 'acme');
   assert.equal(plan.get('co'), 'co');
@@ -56,9 +54,9 @@ test('planGroups sends a parentless folder to Other, and a personal folder to it
   assert.equal(groupCount(plan), 2);
 });
 
-// The groups a plan really opens: every distinct target except Daily.
+// The groups a plan really opens: every distinct target.
 function groupCount(plan) {
-  return new Set([...plan.values()].filter((id) => id !== 'daily')).size;
+  return new Set(plan.values()).size;
 }
 
 test('planGroups counts Other as a group when folding first sends tabs there', () => {
@@ -109,12 +107,11 @@ test('planGroups keeps within the limit when folds target several empty parents 
   assert.deepEqual([...roomy.values()], ['a', 'b', 'x', 'y', 'z']);
 });
 
-test('planGroups with a limit of 1 puts everything in one group, Daily aside', () => {
-  const counts = new Map([['co', 5], ['acme', 4], ['pay', 1], ['trav', 3], ['daily', 8]]);
+test('planGroups with a limit of 1 puts everything in one group', () => {
+  const counts = new Map([['co', 5], ['acme', 4], ['pay', 1], ['trav', 3]]);
   const plan = planGroups(cats, counts, 1);
   assert.equal(groupCount(plan), 1, `got ${[...plan]}`);
-  assert.equal(plan.get('daily'), 'daily');
-  assert.equal(plan.size, 5);
+  assert.equal(plan.size, 4);
 });
 
 test('planGroups with a limit of 1 and only work folders folds them all into the company group', () => {
@@ -165,7 +162,7 @@ test('planGroups never opens more groups than the limit, and only folds upwards 
   const kinds = ['work', 'personal', 'company'];
   for (let round = 0; round < 300; round++) {
     const size = 2 + rand(10);
-    const list = [{ id: 'daily', name: 'Daily', kind: 'personal', parentId: null }];
+    const list = [];
     for (let i = 0; i < size; i++) {
       const parentId = i > 0 && rand(2) ? `c${rand(i)}` : null;
       list.push({ id: `c${i}`, name: `C${i}`, kind: kinds[rand(3)], parentId, pinned: rand(6) === 0 });
@@ -179,7 +176,6 @@ test('planGroups never opens more groups than the limit, and only folds upwards 
     const label = `round ${round}, max ${max}: ${JSON.stringify([...plan])}`;
     assert.ok(groupCount(plan) <= max, label);
     for (const [id, n] of counts) if (n > 0) assert.ok(plan.has(id), `${label} misses ${id}`);
-    if (counts.get('daily')) assert.equal(plan.get('daily'), 'daily', label);
     for (const [id, to] of plan) {
       if (to === id || to === 'other') continue;
       // The target is an ancestor (or, for work, the company category).

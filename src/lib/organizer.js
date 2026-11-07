@@ -2,7 +2,7 @@
 
 import { getSettings, getState, updateState } from './store.js';
 import { hostOf, isGroupable, pageKey, realUrl } from './urls.js';
-import { DAILY_ID, OTHER_ID, ensureDaily, ensureOther, findByName, mergeCategories } from './categories.js';
+import { OTHER_ID, ensureOther, findByName, mergeCategories } from './categories.js';
 import { ai, classifierReady, deciderStatus } from './ai.js';
 import { candidateTerms, displayName } from './bm25.js';
 import { profileText } from './profile.js';
@@ -12,6 +12,7 @@ import { decisionOrder, decisionState, folderOption, pageText, shortlist, should
 import { sortAll } from './sorter.js';
 import { applyReason, whyOptions } from './reasons.js';
 import { carryUse, planPins, startCooldown } from './usage.js';
+import { heldTabIds } from './recent.js';
 
 // Tab group changes we caused (so they aren't mistaken for the user teaching us).
 export const expectedGroupChange = new Map(); // tabId -> groupId | '*'
@@ -69,6 +70,11 @@ async function activityAt() {
   return lastActivity;
 }
 
+/** Whether the tab bar has been left alone long enough for TabSage to move tabs. */
+export async function tabBarQuiet(settings) {
+  return Date.now() - (await activityAt()) >= settings.idleMinutes * 60000;
+}
+
 // The tab the user is looking at right now: the active tab of the last-focused normal window.
 async function lookingAtNow() {
   const w = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
@@ -87,7 +93,7 @@ export function organize(opts = {}) {
 // Tabs we are unpinning ourselves, so the change is not mistaken for the user's.
 const expectedUnpin = new Set();
 
-const realCats = (st) => Object.values(st.categories).filter((c) => c.id !== OTHER_ID && c.id !== DAILY_ID);
+const realCats = (st) => Object.values(st.categories).filter((c) => c.id !== OTHER_ID);
 
 // Folders the user set up (in onboarding, Settings or by naming a group) stay even when nothing is in them.
 function ownedByUser(st, c) {
@@ -257,6 +263,24 @@ async function discover(st, settings, pages, inOther, proposed = []) {
   return added;
 }
 
+// Once, after the update that replaced the Daily group: take its tabs out of the old group.
+async function emptyRetiredDaily(st) {
+  if (!st.retiredDaily) return;
+  for (const g of await chrome.tabGroups.query({})) {
+    if (g.title !== 'Daily') continue;
+    const ids = (await chrome.tabs.query({ groupId: g.id })).filter((t) => t.groupId === g.id).map((t) => t.id);
+    ids.forEach((id) => expectedGroupChange.set(id, '*'));
+    try {
+      await chrome.tabs.ungroup(ids);
+    } catch (e) {
+      ids.forEach((id) => expectedGroupChange.delete(id));
+      console.warn('[TabSage] could not empty the old Daily group', e.message);
+      return;
+    }
+  }
+  delete st.retiredDaily;
+}
+
 /** Adopt user-created, named groups as categories, placed under the company or a category. */
 async function adoptUserGroups(st, settings) {
   const groups = await chrome.tabGroups.query({});
@@ -293,6 +317,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   const st = await getState();
   ensureOther(st, settings);
   await loadManualTabs();
+  await emptyRetiredDaily(st);
   await adoptUserGroups(st, settings);
 
   // incognito tabs, tabs sitting in an unnamed group the user made by hand, or pulled out by hand: leave them be
@@ -390,19 +415,22 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   }
   if (more) chrome.alarms.create('organize-more', { delayInMinutes: 0.5 });
 
-  // --- 5. pinned tabs and the Daily group. The tabs are read again, as the classifier may have taken
-  // a while and the user may have moved, closed or switched tabs.
+  // --- 5. pinned tabs. The tabs are read again, as the classifier may have taken a while and the user
+  // may have moved, closed or switched tabs. Nothing moves until the tab bar has been left alone for a
+  // while, and your most recently used tabs never move, so Ctrl+Tab still finds the tab you were just on.
   let live = await chrome.tabs.query({ windowType: 'normal' });
   followPins(st, live, await pinTabs(), now);
+  const lastBusy = await activityAt();
+  const idleMs = settings.idleMinutes * 60000;
+  const quiet = Date.now() - lastBusy >= idleMs;
+  const held = heldTabIds(live, settings.keepRecent);
   const looking = await lookingAtNow();
-  const { daily, changed } = await applyPins(st, settings, live, eligible(live), looking, now);
-  if (changed) live = await chrome.tabs.query({ windowType: 'normal' });
+  if (quiet && (await applyPins(st, settings, live, eligible(live), looking, now, held))) live = await chrome.tabs.query({ windowType: 'normal' });
   await rememberPinTabs(st, live);
-  if (daily.size) ensureDaily(st);
 
-  // --- 6. folders → groups: the lowest-ranked fold into their parents. Daily pages show in Daily.
+  // --- 6. folders → groups: the lowest-ranked fold into their parents.
   const fresh = eligible(live);
-  const idOf = (t) => (daily.has(keyOf(t)) ? DAILY_ID : st.pageMap[keyOf(t)]?.catId);
+  const idOf = (t) => st.pageMap[keyOf(t)]?.catId;
   const counts = new Map();
   for (const t of fresh) {
     const id = idOf(t);
@@ -421,6 +449,7 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
   }
 
   // --- 7. apply to Chrome tab groups, per window
+  let waiting = !quiet; // pins skipped above wait for the quiet run too
   for (const [windowId, cats] of byWindow) {
     const groups = await chrome.tabGroups.query({ windowId });
     const gidFor = new Map();
@@ -434,7 +463,11 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
       let gid = gidFor.get(catId);
       const pending = tabs.filter((t) => gid === undefined || t.groupId !== gid);
       const looking = pending.length ? await lookingAtNow() : undefined;
-      const moving = pending.filter((t) => t.id !== looking).map((t) => t.id);
+      const moving = pending.filter((t) => t.id !== looking && !held.has(t.id)).map((t) => t.id);
+      if (moving.length && !quiet) {
+        waiting = true;
+        continue;
+      }
       try {
         if (gid === undefined) {
           if (!moving.length) continue;
@@ -470,6 +503,9 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
     if (!c.pinned && !mapped.has(c.id) && !ownedByUser(st, c) && now - c.createdAt > 14 * 864e5) delete st.categories[c.id];
   }
 
+  // tabs that would have moved wait for the tab bar to be left alone
+  if (waiting) chrome.alarms.create('organize-quiet', { when: lastBusy + idleMs + 5000 });
+
   st.stats = { organizedAt: now, lastEngine, reason };
   await updateState(() => {}, { immediate: true });
   await sortAll();
@@ -478,23 +514,24 @@ async function _organize({ rediscover = false, categories = null, reason = '' } 
 const pinnable = (t) => !t.incognito && isGroupable({ ...t, pinned: false });
 
 /**
- * Pin and unpin tabs by how much their pages are used; returns the pages for the Daily group.
- * Pages the user pinned or placed by hand are left alone, and so is the tab being looked at.
+ * Pin and unpin tabs by how much their pages are used; returns whether anything changed.
+ * Pages the user pinned or placed by hand are left alone, and so are the tab being looked at and the
+ * most recently used tabs (`held`).
  */
-async function applyPins(st, settings, live, fresh, looking, now) {
+async function applyPins(st, settings, live, fresh, looking, now, held) {
   const open = [];
   for (const t of live) if (t.pinned && pinnable(t)) open.push({ key: keyOf(t), tabId: t.id, pinned: true, userPinned: !st.ourPins[keyOf(t)] });
   for (const t of fresh) {
     const m = st.pageMap[keyOf(t)];
     if (m?.fixed && m.source === 'user') continue;
-    open.push({ key: keyOf(t), tabId: t.id, pinned: false, userPinned: false, inDaily: groupCat.get(t.groupId) === DAILY_ID });
+    open.push({ key: keyOf(t), tabId: t.id, pinned: false, userPinned: false });
   }
   const plan = planPins(open, st.usage, {
-    now, pinMax: settings.pinnedMax, dailyMax: settings.dailyMax, ourPins: st.ourPins, cooldown: st.pinCooldown,
+    now, pinMax: settings.pinnedMax, ourPins: st.ourPins, cooldown: st.pinCooldown,
   });
   let changed = false;
   for (const key of plan.unpin) {
-    for (const t of live.filter((x) => x.pinned && x.id !== looking && keyOf(x) === key)) {
+    for (const t of live.filter((x) => x.pinned && x.id !== looking && !held.has(x.id) && keyOf(x) === key)) {
       expectedUnpin.add(t.id);
       try {
         await chrome.tabs.update(t.id, { pinned: false });
@@ -507,7 +544,7 @@ async function applyPins(st, settings, live, fresh, looking, now) {
     }
   }
   for (const key of plan.pin) {
-    const t = fresh.find((x) => x.id !== looking && keyOf(x) === key);
+    const t = fresh.find((x) => x.id !== looking && !held.has(x.id) && keyOf(x) === key);
     if (!t) continue;
     // pinning takes the tab out of its group, which is not the user pulling it out
     if (t.groupId !== -1) expectedGroupChange.set(t.id, '*');
@@ -520,7 +557,7 @@ async function applyPins(st, settings, live, fresh, looking, now) {
       console.warn('[TabSage] pin failed', e.message);
     }
   }
-  return { daily: new Set(plan.daily), changed };
+  return changed;
 }
 
 // tabId -> page for the tabs we pinned, kept in session storage so a closed or navigated tab can be
@@ -643,7 +680,6 @@ export async function learnFromUser(tab, groupId) {
   const d = hostOf(url);
   const catId = await catForGroup(groupId);
   if (!catId || !d) return;
-  // a page you put in Daily yourself stays there, outside the ranking (and is not asked why)
   const st = await updateState((st) => {
     st.pageMap[pageKey(url)] = { catId, confidence: 1, source: 'user', at: Date.now(), fixed: true };
     return st;
@@ -662,7 +698,7 @@ const whyAsked = new Map();
 // and sends back the id of the answer chosen, so neither the question nor the answer passes through
 // the page.
 async function askWhy(tab, cat, profile, host) {
-  if (!cat || cat.id === DAILY_ID) return;
+  if (!cat) return;
   const options = whyOptions(cat, profile, host);
   const question = `Why does this belong in ${groupTitle(cat, profile)}?`;
   const ask = { url: pageKey(realUrl(tab)), catId: cat.id, question, options, at: Date.now() };

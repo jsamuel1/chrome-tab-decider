@@ -14,7 +14,8 @@
     "alarms",
     "favicon",
     "scripting",
-    "bookmarks"
+    "bookmarks",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://huggingface.co/*",
@@ -24,15 +25,23 @@
   ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["why.html"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "why.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "background": {
@@ -56,14 +65,27 @@
     "128": "icons/icon128.png"
   },
   "options_page": "options.html",
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "commands": {
     "organize-now": {
-      "suggested_key": { "default": "Alt+Shift+O" },
+      "suggested_key": {
+        "default": "Alt+Shift+O"
+      },
       "description": "Organize tabs now"
     },
     "_execute_action": {
-      "suggested_key": { "default": "Alt+Shift+T" },
+      "suggested_key": {
+        "default": "Alt+Shift+T"
+      },
       "description": "Open TabSage search"
+    },
+    "open-recent": {
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
+      "description": "Open your recent tabs"
     }
   },
   "content_security_policy": {

@@ -114,17 +114,12 @@
       <div class="field">
         <label for="maxGroups">Top categories (groups)</label>
         <input type="number" id="maxGroups" data-key="maxGroups" min="2" max="20" />
-        <div class="help">When more folders have open tabs than this, the smallest ones fold into the folder above them: a work folder into your company's group, a personal folder into its category. Other is only for pages that fit nothing. The Daily group does not count, and starred (★) folders fold last.</div>
+        <div class="help">When more folders have open tabs than this, the smallest ones fold into the folder above them: a work folder into your company's group, a personal folder into its category. Other is only for pages that fit nothing. Starred (★) folders fold last.</div>
       </div>
       <div class="field">
         <label for="pinnedMax">Pinned tabs (most used)</label>
         <input type="number" id="pinnedMax" data-key="pinnedMax" min="0" max="20" />
         <div class="help">How many of the pages you use most TabSage keeps as pinned tabs. 0 turns this off. Tabs you pin yourself are never touched.</div>
-      </div>
-      <div class="field">
-        <label for="dailyMax">Daily group size</label>
-        <input type="number" id="dailyMax" data-key="dailyMax" min="0" max="30" />
-        <div class="help">How many of the next most-used pages go in the Daily group, which always comes first. 0 turns the Daily group off.</div>
       </div>
       <div class="field">
         <label for="otherGroupName">Name of the catch-all group</label>
@@ -162,8 +157,14 @@
         </select>
       </div>
       <div class="field">
-        <label for="sortDelaySec">Re-sort after (seconds idle)</label>
-        <input type="number" id="sortDelaySec" data-key="sortDelaySec" min="2" max="3600" />
+        <label for="keepRecent">Recent tabs left where they are</label>
+        <input type="number" id="keepRecent" data-key="keepRecent" min="0" max="20" />
+        <div class="help">TabSage never moves, groups or pins this many of your most recently used tabs in each window, so Ctrl+Tab and Ctrl+Shift+Tab still find the tab you were just on. Your recent and most-used tabs are always one click away in the Recent side panel (Alt+Shift+R).</div>
+      </div>
+      <div class="field">
+        <label for="idleMinutes">Move other tabs only after (minutes idle)</label>
+        <input type="number" id="idleMinutes" data-key="idleMinutes" min="1" max="60" />
+        <div class="help">Grouping, pinning and sorting wait until you have left the tab bar alone this long.</div>
       </div>
     </div>
 

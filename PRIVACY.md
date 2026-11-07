@@ -22,8 +22,8 @@ you are using:
 - **Your bookmark folders,** and which pages are in them. TabSage only reads
   your bookmarks; it never changes them.
 - **How often you use your tabs:** when you last looked at each tab and how
-  often you switch to it, so your most-used pages can be kept pinned or in the
-  Daily group.
+  often you switch to it, so your most-used pages can be kept pinned and your
+  recent and most-used tabs listed in the Recent side panel.
 - **What you tell it:** the profile you fill in when you install it (your
   company and its web addresses, your kind of work, your projects and the
   categories you want), and the reasons you give when you move a tab and
@@ -98,6 +98,7 @@ To remove it:
 | `offscreen` | A background worker cannot reach the graphics card, so a hidden page hosts the model. |
 | `alarms` | Wake up to re-sort, and to close tabs you have stopped using. |
 | `favicon` | Show a saved site icon for a tab that has not been loaded back in yet. |
+| `sidePanel` | Show the Recent side panel, which lists your recent and most-used tabs so you can switch to them. |
 | `huggingface.co`, `hf.co` | Download the classifier. Nothing is uploaded to them. |
 
 ## Children

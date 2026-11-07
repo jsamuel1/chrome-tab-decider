@@ -110,8 +110,9 @@ test('a page placed by hand while the classifier thinks keeps its place, and its
 });
 
 test('a tab the user switches to while the classifier thinks is not moved', async () => {
-  const { organize } = await import('../src/lib/organizer.js');
+  const { organize, markActivity } = await import('../src/lib/organizer.js');
   await reset();
+  markActivity(Date.now() - 60 * MIN); // the tab bar was quiet when the run began
   tabs = [tab(1, 'A page', 'https://a.com/x', { active: true }), tab(2, 'B page', 'https://b.com/y')];
   during = {
     page: 'B page',

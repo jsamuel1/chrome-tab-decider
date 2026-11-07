@@ -33,7 +33,9 @@ globalThis.chrome = {
   alarms: { create: () => {} },
 };
 
-const { organize, learnFromUser, manualTabs, clearManual } = await import('../src/lib/organizer.js');
+const { markActivity, organize, learnFromUser, manualTabs, clearManual } = await import('../src/lib/organizer.js');
+// these tests are about grouping, not waiting: the tab bar has been left alone, so tabs may move
+test.beforeEach(() => markActivity(Date.now() - 60 * 60000));
 const { setAiForTest } = await import('../src/lib/ai.js');
 const { getState } = await import('../src/lib/store.js');
 

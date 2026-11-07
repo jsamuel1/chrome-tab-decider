@@ -10,11 +10,11 @@ export const DEFAULT_SETTINGS = {
   otherRediscoverThreshold: 6,  // tabs in Other (from ≥3 domains) before re-discovery
   collapseInactiveGroups: false,
   pinnedMax: 5,                 // most-used pages TabSage keeps as Chrome pinned tabs
-  dailyMax: 8,                  // next tier, kept in the Daily group
   // Sorting
   groupSort: 'mru',             // 'mru' | 'count' | 'alpha' | 'manual'
   tabSort: 'domain-mru',        // 'domain-mru' | 'mru' | 'title' | 'manual'
-  sortDelaySec: 20,             // wait this long after activity before re-sorting
+  keepRecent: 5,                // your most recently used tabs in each window, which TabSage never moves
+  idleMinutes: 3,               // other tabs are only moved after the tab bar has been left alone this long
   // Archive (trim ad-hoc tabs)
   archiveEnabled: true,
   archiveDays: 7,
@@ -53,7 +53,7 @@ export async function getSettings() {
 }
 
 // Settings with a range: a value from Settings is rounded and kept inside it (0 turns the feature off).
-const RANGES = { pinnedMax: [0, 20], dailyMax: [0, 30] };
+const RANGES = { pinnedMax: [0, 20], keepRecent: [0, 20], idleMinutes: [1, 60] };
 
 /** `patch` with its numbers kept in their ranges. */
 export function cleanSettings(patch) {
@@ -67,7 +67,7 @@ export function cleanSettings(patch) {
 }
 
 /** True when a change to these settings changes how tabs are grouped or pinned, so tabs are organized again. */
-export const regroups = (patch) => ['maxGroups', 'otherGroupName', 'pinnedMax', 'dailyMax'].some((k) => k in (patch || {}));
+export const regroups = (patch) => ['maxGroups', 'otherGroupName', 'pinnedMax', 'keepRecent'].some((k) => k in (patch || {}));
 
 export async function setSettings(patch) {
   const s = await getSettings();
@@ -100,6 +100,12 @@ export function migrate(st) {
     if (c.kind === undefined) c.kind = 'personal';
     if (c.parentId === undefined) c.parentId = null;
     if (c.isNew === undefined) c.isNew = false;
+  }
+  // The Daily group was replaced by the Recent side panel: its pages go back to their own folders, and
+  // the organizer empties the old group once (retiredDaily) so it is not taken for one you named.
+  if (st.categories?.daily) {
+    delete st.categories.daily;
+    st.retiredDaily = true;
   }
   // tabMeta used to be keyed by the full URL; it is keyed by pageKey (no #fragment) now, so fold old keys in.
   if (st.tabMeta) {

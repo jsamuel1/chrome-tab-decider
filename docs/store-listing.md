@@ -36,6 +36,8 @@ hosts the classifier so it can run on the graphics card through WebGPU.
 close tabs you have stopped using.
 
 **`favicon`** — Shows a saved site icon on a placeholder tab that has not been loaded back in yet
+
+**`sidePanel`** — Shows the Recent side panel, which lists the user's most recently used and most-used open tabs so they can switch to one with a click or the keyboard. It only reads tab titles and addresses already available through `tabs`, and never sends them anywhere.
 after Chrome restarts.
 
 **`scripting`** — Shows a small "Why?" card on a page right after you move its tab to another group

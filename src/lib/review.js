@@ -15,7 +15,7 @@ export function reviewFolder(st, { catId, action, name, intoId }, at = Date.now(
     if (next) { cat.name = next; cat.isNew = false; }
   } else if (action === 'place') {
     // where the folder belongs: under the company (work), under a category, or on its own
-    if (cat.kind === 'company' || cat.kind === 'daily' || cat.source === 'system') return st;
+    if (cat.kind === 'company' || cat.source === 'system') return st;
     const parent = st.categories[intoId];
     const top = parent && (parent.kind === 'company' || (parent.kind === 'personal' && !parent.parentId && parent.source !== 'system'));
     if (intoId && (!top || intoId === catId)) return st;

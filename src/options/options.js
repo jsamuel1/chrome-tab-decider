@@ -206,7 +206,7 @@ async function review() {
       <td>
         <button data-keep>Keep</button>
         <button data-rename>Rename</button>
-        <select data-merge><option value="">Merge into…</option>${s.categories.filter((o) => o.id !== c.id && o.id !== 'daily' && !o.isNew).map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>
+        <select data-merge><option value="">Merge into…</option>${s.categories.filter((o) => o.id !== c.id && !o.isNew).map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>
         <label class="small muted">Belongs under ${placeSelect(c, s.categories)}</label>
       </td>
     </tr>`).join('');

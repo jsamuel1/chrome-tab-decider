@@ -1,4 +1,4 @@
-// How much each page is used, and which open pages earn a Chrome pin or a place in the Daily group.
+// How much each page is used, and which open pages earn a Chrome pin.
 
 const DAY = 864e5;
 const MARGIN = 1.25; // a challenger must beat the holder of a slot by this much to take it
@@ -37,11 +37,10 @@ function fill(holders, challengers, slots, score) {
 }
 
 /**
- * Which pages to pin, unpin and show in Daily. `openPages` are `{ key, tabId, pinned, userPinned, inDaily }`;
- * a page pinned by the user is never unpinned and uses up one of the pinned slots. `pin` and `unpin`
- * are changes to make; `daily` is every page that belongs in the Daily group.
+ * Which pages to pin and unpin. `openPages` are `{ key, tabId, pinned, userPinned }`; a page pinned by
+ * the user is never unpinned and uses up one of the pinned slots. `pin` and `unpin` are changes to make.
  */
-export function planPins(openPages, usage, { now, pinMax = 5, dailyMax = 8, ourPins = {}, cooldown = {}, halfLifeDays = 7 }) {
+export function planPins(openPages, usage, { now, pinMax = 5, ourPins = {}, cooldown = {}, halfLifeDays = 7 }) {
   const pages = new Map();
   for (const p of openPages) {
     const seen = pages.get(p.key);
@@ -65,15 +64,7 @@ export function planPins(openPages, usage, { now, pinMax = 5, dailyMax = 8, ourP
   const unpin = all.filter((p) => mine(p) && !pinSet.has(p.key)).map((p) => p.key);
   const pin = pins.filter((k) => !pages.get(k).pinned);
 
-  const free = all.filter((p) => !p.pinned || unpin.includes(p.key));
-  const daily = fill(
-    free.filter((p) => p.inDaily && !pinSet.has(p.key)).map((p) => p.key),
-    free.filter((p) => !p.inDaily && used(p) && !pinSet.has(p.key)).map((p) => p.key),
-    dailyMax,
-    score,
-  ).filter((k) => score(k) > 0);
-
-  return { pin, unpin, daily };
+  return { pin, unpin };
 }
 
 /** Stop pinning a page until `days` from now. Passed cooldowns that have ended are dropped. Returns the new cooldown. */

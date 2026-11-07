@@ -1,6 +1,6 @@
 // How folders become flat Chrome tab groups.
 
-import { OTHER_ID, DAILY_ID } from './categories.js';
+import { OTHER_ID } from './categories.js';
 
 export function groupTitle(cat, profile) {
   const company = String(profile?.company || '').trim();
@@ -37,7 +37,7 @@ function before(a, b) {
  * Which category's group each category with open tabs shows in.
  *
  * Every category with open tabs starts as its own group. While there are more groups than
- * `maxGroups` (Daily never counts, Other counts once anything is in it), one group at a time is
+ * `maxGroups` (Other counts once anything is in it), one group at a time is
  * folded into its parent: the nearest ancestor that is already a group, or the nearest parent with
  * no open tabs of its own (which then becomes a group), or, with no parent at all, into Other.
  * The fold chosen each time is the cheapest: pinned groups last, then the fold that sends the
@@ -58,12 +58,11 @@ export function planGroups(cats, counts, maxGroups) {
     return null;
   };
 
-  // Current groups (Daily is kept aside) and where each folded category went.
+  // Current groups and where each folded category went.
   const groups = new Map();
   const target = new Map();
   const filed = [];
   for (const c of open) {
-    if (c.id === DAILY_ID) continue;
     filed.push(c);
     groups.set(c.id, { id: c.id, pinned: !!c.pinned, tabs: count(c.id) });
   }
@@ -84,7 +83,6 @@ export function planGroups(cats, counts, maxGroups) {
     for (let t = parentOf(byId.get(id)); t && !seen.has(t.id); t = parentOf(t)) {
       seen.add(t.id);
       if (t.id === OTHER_ID) break;
-      if (t.id === DAILY_ID) continue;
       const d = groups.has(t.id) ? t.id : target.has(t.id) ? follow(t.id) : t.id;
       if (d === id) break; // a parent loop leads back here
       return d;
@@ -113,6 +111,5 @@ export function planGroups(cats, counts, maxGroups) {
 
   const plan = new Map();
   for (const c of filed) plan.set(c.id, follow(c.id));
-  if (count(DAILY_ID) > 0) plan.set(DAILY_ID, DAILY_ID);
   return plan;
 }

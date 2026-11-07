@@ -6,7 +6,7 @@ const store = {
   state: {
     categories: {
       c1: { id: 'c1', name: 'Projects', kind: 'work', color: 'blue', pinned: false, lastActive: 0, createdAt: Date.now() },
-      daily: { id: 'daily', name: 'Daily', kind: 'personal', color: 'grey', pinned: true, lastActive: 0, createdAt: Date.now() },
+      trav: { id: 'trav', name: 'Travel', kind: 'personal', color: 'grey', pinned: true, lastActive: 0, createdAt: Date.now() },
     },
     profile: { company: 'Acme', companyDomains: [], projects: [], onboarded: true },
     schemaVersion: 2,
@@ -77,9 +77,9 @@ test('a tab moved in the background, or in an incognito window, is not asked why
 });
 
 test('moving the tab again withdraws the question: the card closes and its answer is not taken', async () => {
-  groupCat.set(51, 'daily');
-  // out of every group, into Daily, into a group that is no folder of ours
-  for (const next of [-1, 51, 60]) {
+  groupCat.set(51, 'trav');
+  // out of every group, and into a group that is no folder of ours
+  for (const next of [-1, 60]) {
     sent.length = 0;
     await learnFromUser(tabs[0], 50);
     const before = structuredClone(await getState());
@@ -97,4 +97,13 @@ test('moving the tab again withdraws the question: the card closes and its answe
   sent.length = 0;
   await learnFromUser({ ...tabs[0], groupId: -1 }, -1);
   assert.deepEqual(sent, []);
+});
+
+test('moving the tab on to another folder closes the old card first, then asks about the new folder', async () => {
+  groupCat.set(51, 'trav');
+  await learnFromUser(tabs[0], 50);
+  sent.length = 0;
+  await learnFromUser({ ...tabs[0], groupId: 51 }, 51);
+  assert.deepEqual(sent[0], [1, { target: 'why', close: true }], 'the old card was not closed first');
+  assert.equal(session.why1?.catId, 'trav', 'the new question is not about the folder moved to');
 });
