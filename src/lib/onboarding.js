@@ -8,7 +8,7 @@ const MAX_CATEGORIES = 15;
 // Second-level labels under a country code that are not themselves owned by anyone (example.co.uk, example.com.au).
 const SHARED_SLD = /^(ac|co|com|edu|gov|ne|net|or|org)$/;
 
-/** The part of a page's host its owner registered: "w.amazon.com" → "amazon.com". Empty for addresses and non-web pages. */
+/** The part of a page's host its owner registered: "wiki.northwind.com" → "northwind.com". Empty for addresses and non-web pages. */
 export function registrableDomain(url) {
   let host;
   try {

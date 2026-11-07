@@ -16,7 +16,7 @@ function runs(text, lang) {
       else brk();
       continue;
     }
-    // An address such as phonetool.amazon.com is one segment; its names are what match a folder.
+    // An address such as people.northwind.com is one segment; its names are what match a folder.
     const parts = segment.toLowerCase().split('.').filter((t) => !/^\d*$/.test(t) && ([...t].length > 1 || SINGLE_OK.test(t)));
     if (!parts.length) {
       brk();
