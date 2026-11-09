@@ -99,7 +99,9 @@ export class Decider {
         ep = 'wasm';
       }
     }
-    const opts = { executionProviders: [ep], graphOptimizationLevel: 'all' };
+    // logSeverityLevel 3 = errors only: a session logs warnings by default, and ORT's note that it put some
+    // shape ops on the CPU (on purpose) shows up as an error in chrome://extensions.
+    const opts = { executionProviders: [ep], graphOptimizationLevel: 'all', logSeverityLevel: 3 };
     if (data) opts.externalData = [{ path: m.dataFile.split('/').pop(), data }];
     this.session = await ort.InferenceSession.create(graph, opts);
     this.device = ep;
