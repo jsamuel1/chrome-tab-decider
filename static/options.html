@@ -7,45 +7,19 @@
     <link rel="stylesheet" href="ui.css" />
   </head>
   <body class="options">
-    <h1>TabSage</h1>
-    <div class="muted">Puts each of your tabs in a folder that fits the page, shows the folders as tab groups, and keeps them across restarts. Everything runs on this device.</div>
-
+    <header class="appbar">
+      <div class="brand"><img src="icons/icon32.png" alt="" /> TabSage</div>
+      <nav class="tabbar" role="tablist">
+        <a role="tab" href="options.html" aria-current="page" aria-selected="true">Settings</a>
+        <a role="tab" href="folders.html" aria-selected="false">Folders</a>
+        <a role="tab" href="onboarding.html" aria-selected="false">Profile</a>
+      </nav>
+    </header>
+    <main>
     <h2>Your profile</h2>
-    <div class="card">
-      <div class="field">
-        <label for="p_company">Company</label>
-        <input type="text" id="p_company" />
-      </div>
-      <div class="field">
-        <label for="p_domains">Company web domains</label>
-        <input type="text" id="p_domains" placeholder="e.g. northwind.com, northwind.io" />
-        <div class="help">Pages on these sites are usually treated as work.</div>
-      </div>
-      <div class="field">
-        <label for="p_work">Type of work</label>
-        <input type="text" id="p_work" />
-      </div>
-      <div class="field">
-        <label for="p_projects">Projects or customers</label>
-        <input type="text" id="p_projects" placeholder="Separated by commas" />
-      </div>
-      <div class="field">
-        <label for="p_style">Grouping</label>
-        <select id="p_style">
-          <option value="specific-work">By project or customer at work, by topic for personal</option>
-          <option value="generic">By general topic everywhere</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="p_categories">Categories</label>
-        <input type="text" id="p_categories" placeholder="Separated by commas" />
-        <div class="help">Each project and category becomes a folder. Removing one here does not delete its folder; do that below.</div>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
-        <button id="saveProfile" class="primary">Save profile</button>
-        <button id="rerunOnboarding">Run onboarding again</button>
-        <span id="profileMsg" class="muted"></span>
-      </div>
+    <div class="card profile">
+      <dl id="profile"></dl>
+      <div class="actions"><a class="button" href="onboarding.html">Edit profile</a></div>
     </div>
 
     <h2>On-device AI</h2>
@@ -216,39 +190,15 @@
       </div>
     </div>
 
-    <h2>Folders &amp; learned domains</h2>
-    <div class="card">
-      <table>
-        <thead><tr><th>Folder</th><th>Belongs under</th><th>Sites you bound here (click to forget)</th><th></th></tr></thead>
-        <tbody id="cats"></tbody>
-      </table>
-      <div style="display:flex;gap:6px;margin-top:10px">
-        <input type="text" id="newCat" placeholder="Add a folder…" />
-        <button id="addCat">Add</button>
-      </div>
-      <div class="muted small" style="margin-top:8px">Move a tab into a different group and TabSage keeps that page there. It covers the whole site only if you choose that answer when TabSage asks why.</div>
-    </div>
-
-    <h2>New folders</h2>
-    <div class="card">
-      <div class="muted small" id="newNone">Nothing to review.</div>
-      <table><tbody id="newFolders"></tbody></table>
-    </div>
-
-    <h2>Reasons you gave</h2>
-    <div class="card">
-      <div class="muted small" id="reasonsNone">No saved reasons.</div>
-      <table><tbody id="reasons"></tbody></table>
-    </div>
-
     <h2>Data</h2>
-    <div class="card" style="display:flex;gap:6px;flex-wrap:wrap">
+    <div class="card inline" style="flex-wrap:wrap;align-items:center;padding:8px 12px">
       <button id="export">Export JSON</button>
       <button id="import">Import JSON…</button>
       <input type="file" id="importFile" accept=".json,application/json" hidden />
       <button id="reset">Reset everything</button>
       <span class="muted small" id="dataMsg" role="status"></span>
     </div>
+    </main>
     <script type="module" src="options.js"></script>
   </body>
 </html>

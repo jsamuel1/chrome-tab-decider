@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TabSage Folders</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options">
+    <header class="appbar">
+      <div class="brand"><img src="icons/icon32.png" alt="" /> TabSage</div>
+      <nav class="tabbar" role="tablist">
+        <a role="tab" href="options.html" aria-selected="false">Settings</a>
+        <a role="tab" href="folders.html" aria-current="page" aria-selected="true">Folders</a>
+        <a role="tab" href="onboarding.html" aria-selected="false">Profile</a>
+      </nav>
+    </header>
+    <main>
+    <h2>New folders <span class="muted" id="newCount"></span></h2>
+    <div class="card">
+      <div class="muted small" id="newNone">Nothing to review.</div>
+      <table><tbody id="newFolders"></tbody></table>
+    </div>
+
+    <h2>Folders &amp; learned sites</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Folder</th><th>Belongs under</th><th>Sites you bound here (click to forget)</th><th></th></tr></thead>
+        <tbody id="cats"></tbody>
+      </table>
+      <div class="inline">
+        <input type="text" id="newCat" placeholder="Add a folder…" />
+        <button id="addCat">Add</button>
+      </div>
+      <div class="help">Move a tab into a different group and TabSage keeps that page there. It covers the whole site only if you choose that answer when TabSage asks why.</div>
+    </div>
+
+    <h2>Reasons you gave</h2>
+    <div class="card">
+      <div class="muted small" id="reasonsNone">No saved reasons.</div>
+      <table><tbody id="reasons"></tbody></table>
+    </div>
+    </main>
+    <script type="module" src="folders.js"></script>
+  </body>
+</html>

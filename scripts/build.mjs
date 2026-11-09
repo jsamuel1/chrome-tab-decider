@@ -40,6 +40,7 @@ const opts = {
     offscreen: 'src/offscreen/offscreen.js',
     popup: 'src/popup/popup.js',
     options: 'src/options/options.js',
+    folders: 'src/folders/folders.js',
     onboarding: 'src/onboarding/onboarding.js',
     recent: 'src/recent/recent.js',
     lazy: 'src/lazy/lazy.js',

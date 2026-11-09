@@ -7,8 +7,17 @@
     <link rel="stylesheet" href="ui.css" />
   </head>
   <body class="options onboarding">
-    <h1>Welcome to TabSage</h1>
-    <div class="muted">A few questions while the classifier downloads. Your answers stay in this browser, and you can change them in Settings at any time.</div>
+    <header class="appbar">
+      <div class="brand"><img src="icons/icon32.png" alt="" /> TabSage</div>
+      <nav class="tabbar" role="tablist">
+        <a role="tab" href="options.html" aria-selected="false">Settings</a>
+        <a role="tab" href="folders.html" aria-selected="false">Folders</a>
+        <a role="tab" href="onboarding.html" aria-current="page" aria-selected="true">Profile</a>
+      </nav>
+    </header>
+    <main>
+    <h1>Your profile</h1>
+    <div class="muted">A few questions, so TabSage knows which tabs are work and which folders to make. Your answers stay in this browser; come back here to change them.</div>
 
     <form id="steps" autocomplete="off">
       <section class="step card" data-step="company">
@@ -81,6 +90,7 @@
         <progress id="dlProg" max="100" value="0" hidden></progress>
         <div style="display:flex;gap:6px;margin-top:12px">
           <button type="button" id="openSettings">Open Settings</button>
+          <a class="button" href="folders.html">Review folders</a>
         </div>
       </section>
 
@@ -90,6 +100,7 @@
         <button type="submit" id="next" class="primary">Next</button>
       </div>
     </form>
+    </main>
     <script type="module" src="onboarding.js"></script>
   </body>
 </html>

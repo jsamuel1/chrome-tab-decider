@@ -18,7 +18,7 @@ export const DEFAULT_SETTINGS = {
   idleMinutes: 3,               // other tabs are only moved after the tab bar has been left alone this long
   // Archive (trim ad-hoc tabs)
   archiveEnabled: true,
-  archiveDays: 7,
+  archiveDays: 1,
   archiveScope: 'unpinned',     // 'unpinned' (any tab not in a pinned group) | 'other' (only the Other group)
   archiveMax: 5000,
   // Persistence

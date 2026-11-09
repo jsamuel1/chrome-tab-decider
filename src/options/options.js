@@ -1,5 +1,4 @@
 import { openAppearanceSettings, bg, engine, esc, fmtBytes, progressText } from '../lib/ui-common.js';
-import { describeReason, newestFirst } from '../lib/reasons.js';
 import { MODELS } from '../engine/models.js';
 import { llmAvailability, prepareLLM } from '../engine/llm.js';
 
@@ -47,35 +46,26 @@ async function load() {
   showModelHelp();
   modelStatus();
   llmStatus();
-  cats();
-  review();
   profile();
 }
 
-const PROFILE_TEXT = { company: 'p_company', work: 'p_work', style: 'p_style' };
-const PROFILE_LISTS = { companyDomains: 'p_domains', projects: 'p_projects', categories: 'p_categories' };
+const STYLE = { 'specific-work': 'By project at work, by topic otherwise', generic: 'By topic everywhere' };
 
+// A read-only summary: the profile is edited in its own view (onboarding.html).
 async function profile() {
   const { profile: p = {} } = await bg('status');
-  for (const [k, id] of Object.entries(PROFILE_TEXT)) $(id).value = p[k] || $(id).value;
-  for (const [k, id] of Object.entries(PROFILE_LISTS)) $(id).value = (p[k] || []).join(', ');
+  const list = (xs) => (xs?.length ? xs.map(esc).join(', ') : '<span class="muted">—</span>');
+  const rows = [
+    ['Company', p.company ? esc(p.company) : '<span class="muted">—</span>'],
+    ['Domains', list(p.companyDomains)],
+    ['Work', p.work ? esc(p.work) : '<span class="muted">—</span>'],
+    ['Projects', list(p.projects)],
+    ['Grouping', esc(STYLE[p.style] || p.style || '')],
+    ['Categories', list(p.categories)],
+  ];
+  $('profile').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
 }
-$('saveProfile').onclick = async () => {
-  const p = {};
-  for (const [k, id] of Object.entries(PROFILE_TEXT)) p[k] = $(id).value;
-  for (const [k, id] of Object.entries(PROFILE_LISTS)) p[k] = $(id).value.split(',').map((x) => x.trim()).filter(Boolean);
-  $('saveProfile').disabled = true;
-  try {
-    await bg('saveProfile', { profile: p });
-    $('profileMsg').textContent = 'Saved';
-    cats();
-  } catch (e) {
-    $('profileMsg').textContent = `Failed: ${e.message}`;
-  }
-  $('saveProfile').disabled = false;
-};
 $('openAppearance').onclick = () => openAppearanceSettings();
-$('rerunOnboarding').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
 
 async function modelStatus() {
   try {
@@ -97,10 +87,12 @@ async function llmStatus() {
     downloadable: 'Gemini Nano can be downloaded',
     downloading: 'Gemini Nano downloading…',
     // availability() gives no reason: a managed Chrome can block it by policy, or the device can fall short
-    unavailable: 'Not available in this Chrome. Either an administrator policy blocks it (managed browsers), or the device falls short (22 GB free disk, and more than 4 GB VRAM or 16 GB RAM).',
+    unavailable: 'Unavailable',
     unsupported: 'Prompt API not present in this Chrome (138+ required)',
   }[a] || a;
   $('llmStatus').textContent = text;
+  // availability() gives no reason, so the likely ones are a hover away
+  $('llmStatus').title = a === 'unavailable' ? 'Blocked by an administrator policy, or this device falls short (22 GB free disk, and more than 4 GB VRAM or 16 GB RAM).' : '';
   $('prepareLLM').hidden = a !== 'downloadable';
 }
 
@@ -163,95 +155,6 @@ chrome.runtime.onMessage.addListener((m) => {
     if (selfTesting) $('selfTestOut').textContent = `Self-test: model loaded on ${m.device}, running the test cases…`;
   }
 });
-
-// "Belongs under": the company (its folders are work) or one of the high-level personal folders.
-function placeSelect(c, all) {
-  if (c.kind === 'company' || c.source === 'system') return '<span class="muted">—</span>';
-  const tops = all.filter((o) => o.id !== c.id && (o.kind === 'company' || (o.kind === 'personal' && !o.parentId && o.source !== 'system')));
-  const opt = (id, label) => `<option value="${esc(id)}" ${(c.parentId || '') === id ? 'selected' : ''}>${esc(label)}</option>`;
-  return `<select data-place="${esc(c.id)}">${opt('', 'Nothing (its own folder)')}${tops.map((o) => opt(o.id, o.kind === 'company' ? `${o.name} (work)` : o.name)).join('')}</select>`;
-}
-
-async function cats() {
-  const s = await bg('status');
-  $('cats').innerHTML = s.categories.map((c) => `
-    <tr>
-      <td><span class="dot" style="display:inline-block;background:var(--g-${c.color})"></span>
-        <input type="text" value="${esc(c.name)}" data-rename="${c.id}" style="width:auto;display:inline-block;padding:3px 6px" ${c.id === 'other' ? 'disabled' : ''}/>
-        ${c.pinned ? '★' : ''}</td>
-      <td>${placeSelect(c, s.categories)}</td>
-      <td><div class="chips">${c.domains.map((d) => `<span class="chip" data-forget="${esc(d)}" title="Forget: pages on this site are decided one by one again">${esc(d)}</span>`).join('') || '<span class="muted">—</span>'}</div></td>
-      <td>${c.id === 'other' ? '' : `<button data-del="${c.id}">Delete</button>`}</td>
-    </tr>`).join('');
-}
-$('cats').addEventListener('click', async (e) => {
-  const f = e.target.closest('[data-forget]');
-  if (f) { await bg('forgetDomain', { domain: f.dataset.forget }); return cats(); }
-  const d = e.target.closest('[data-del]');
-  if (d && confirm('Delete this folder? Its pages will be decided again, and the sites you bound to it are let go.')) { await bg('deleteCategory', { catId: d.dataset.del }); cats(); }
-});
-$('cats').addEventListener('change', async (e) => {
-  const p = e.target.closest('[data-place]');
-  if (p) { await bg('reviewFolder', { catId: p.dataset.place, action: 'place', intoId: p.value }); cats(); review(); return; }
-  const r = e.target.closest('[data-rename]');
-  if (r && r.value.trim()) { await bg('renameCategory', { catId: r.dataset.rename, name: r.value.trim() }); cats(); }
-});
-async function review() {
-  const s = await bg('status');
-  const fresh = s.categories.filter((c) => c.isNew);
-  $('newNone').hidden = fresh.length > 0;
-  $('newFolders').innerHTML = fresh.map((c) => `
-    <tr data-new="${c.id}">
-      <td><input type="text" value="${esc(c.name)}" data-newname style="width:auto;display:inline-block;padding:3px 6px" /></td>
-      <td>${c.tabCount} tab${c.tabCount === 1 ? '' : 's'}</td>
-      <td>
-        <button data-keep>Keep</button>
-        <button data-rename>Rename</button>
-        <select data-merge><option value="">Merge into…</option>${s.categories.filter((o) => o.id !== c.id && !o.isNew).map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>
-        <label class="small muted">Belongs under ${placeSelect(c, s.categories)}</label>
-      </td>
-    </tr>`).join('');
-  $('reasonsNone').hidden = s.reasons.length > 0;
-  $('reasons').innerHTML = newestFirst(s.reasons).map((r) => `
-    <tr><td>${esc(describeReason(r, s.categories))}</td><td><button data-delreason="${r.id}">Delete</button></td></tr>`).join('');
-}
-async function reviewAction(e) {
-  const row = e.target.closest('[data-new]');
-  if (!row) return;
-  const catId = row.dataset.new;
-  if (e.target.matches('[data-keep]')) await bg('reviewFolder', { catId, action: 'keep' });
-  else if (e.target.matches('[data-rename]')) await bg('reviewFolder', { catId, action: 'rename', name: row.querySelector('[data-newname]').value });
-  else if (e.target.matches('[data-place]') && e.type === 'change') await bg('reviewFolder', { catId, action: 'place', intoId: e.target.value });
-  else if (e.target.matches('[data-merge]') && e.target.value && e.type === 'change') {
-    // merging cannot be undone, so a stray arrow key on the list must not do it
-    const name = row.querySelector('[data-newname]').value;
-    const target = e.target.selectedOptions[0]?.textContent || '';
-    if (!confirm(`Merge ${name} into ${target}? Its tabs move there, and ${name} is gone for good.`)) {
-      e.target.value = '';
-      return;
-    }
-    await bg('reviewFolder', { catId, action: 'merge', intoId: e.target.value });
-  } else return;
-  cats();
-  review();
-}
-$('newFolders').addEventListener('click', reviewAction);
-$('newFolders').addEventListener('change', reviewAction);
-$('reasons').addEventListener('click', async (e) => {
-  const d = e.target.closest('[data-delreason]');
-  if (!d) return;
-  await bg('deleteReason', { id: d.dataset.delreason });
-  cats();
-  review();
-});
-
-$('addCat').onclick = async () => {
-  const name = $('newCat').value.trim();
-  if (!name) return;
-  await bg('addCategory', { name, description: '' });
-  $('newCat').value = '';
-  cats();
-};
 
 $('archivePreview').onclick = async () => {
   const urls = await bg('archivePreview');

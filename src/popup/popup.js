@@ -61,7 +61,7 @@ async function refresh() {
   const fresh = status.categories.filter((c) => c.isNew).length;
   $('newFolders').hidden = !fresh;
   $('newFolders').textContent = `${fresh} new folder${fresh === 1 ? '' : 's'} to review`;
-  $('foot').textContent = `${status.archiveCount} archived · trims unvisited tabs after ${status.settings.archiveDays} days` +
+  $('foot').textContent = `${status.archiveCount} archived · trims unvisited tabs after ${status.settings.archiveDays === 1 ? '24 hours' : `${status.settings.archiveDays} days`}` +
     (status.stats?.organizedAt ? ` · organized ${ago(status.stats.organizedAt)}` : '');
 }
 
@@ -107,7 +107,7 @@ $('rediscover').onclick = () =>
     await bg('organize', { rediscover: true, categories });
   });
 $('settings').onclick = () => chrome.runtime.openOptionsPage();
-$('newFolders').onclick = (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); };
+$('newFolders').onclick = (e) => { e.preventDefault(); chrome.tabs.create({ url: chrome.runtime.getURL('folders.html') }); window.close(); };
 
 // ---------- search
 let searchTimer;

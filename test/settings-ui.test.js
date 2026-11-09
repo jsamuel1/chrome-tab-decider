@@ -11,6 +11,9 @@ const { reviewFolder } = await import('../src/lib/review.js');
 
 const html = readFileSync(new URL('../static/options.html', import.meta.url), 'utf8');
 const js = readFileSync(new URL('../src/options/options.js', import.meta.url), 'utf8');
+// Folder review, merging and reasons live in their own view
+const fhtml = readFileSync(new URL('../static/folders.html', import.meta.url), 'utf8');
+const fjs = readFileSync(new URL('../src/folders/folders.js', import.meta.url), 'utf8');
 
 test('Settings has controls for pins, recent tabs and the idle wait, which stay in range', () => {
   for (const k of ['pinnedMax', 'keepRecent', 'idleMinutes']) assert.match(html, new RegExp(`<input type="number" id="${k}" data-key="${k}"`));
@@ -24,15 +27,15 @@ test('Settings has controls for pins, recent tabs and the idle wait, which stay 
 
 test("Settings no longer describes the old site-wide, keyword-based behaviour", () => {
   for (const stale of ['keyword', 'whole domain', 'files each domain', 'the domain goes', 'by domain and topic', 'Domains (click to forget)', 'Smaller categories fold into the Other group']) {
-    assert.ok(!html.includes(stale), `options.html still says "${stale}"`);
+    assert.ok(!html.includes(stale) && !fhtml.includes(stale), `Settings or Folders still says "${stale}"`);
   }
-  for (const stale of ['keyword matching', 'Its domains will be re-classified']) assert.ok(!js.includes(stale), `options.js still says "${stale}"`);
-  assert.match(html, /Sites you bound here \(click to forget\)/);
+  for (const stale of ['keyword matching', 'Its domains will be re-classified']) assert.ok(!js.includes(stale) && !fjs.includes(stale), `still says "${stale}"`);
+  assert.match(fhtml, /Sites you bound here \(click to forget\)/);
   assert.match(js, /TabSage leaves your tabs alone until it is/);
 });
 
 test('merging a folder asks first, and a cancelled merge resets the list', () => {
-  const merge = js.slice(js.indexOf("e.target.matches('[data-merge]')"));
+  const merge = fjs.slice(fjs.indexOf("e.target.matches('[data-merge]')"));
   const ask = merge.indexOf('confirm(');
   const call = merge.indexOf("action: 'merge'");
   assert.ok(ask !== -1 && ask < call, 'the merge runs without asking');
@@ -51,7 +54,7 @@ test('each reason shows its folder and its page or site, newest first', () => {
     "It's personal — Shopping — ebay.com",
     "It's personal — Shopping — amazon.com/gp/cart/view.html",
   ]);
-  assert.match(js, /describeReason\(r, s\.categories\)/);
+  assert.match(fjs, /describeReason\(r, s\.categories\)/);
 });
 
 test('a newer answer about the same page, or a new rule for the same site, replaces the old reason', () => {
@@ -86,7 +89,19 @@ test('a folder can be placed under the company or a category in Settings', () =>
   assert.equal(st.categories.x.parentId, null, 'a folder was put under itself');
   reviewFolder(st, { catId: 'co', action: 'place', intoId: 'out' });
   assert.equal(st.categories.co.kind, 'company', 'the company folder was moved');
-  assert.match(js, /action: 'place'/);
+  assert.match(fjs, /action: 'place'/);
+});
+
+test('Settings, Folders and Profile are separate views, and Settings only shows the profile', () => {
+  const onboarding = readFileSync(new URL('../static/onboarding.html', import.meta.url), 'utf8');
+  for (const page of [html, fhtml, onboarding]) {
+    for (const href of ['options.html', 'folders.html', 'onboarding.html']) assert.match(page, new RegExp(`role="tab" href="${href}"`));
+  }
+  for (const id of ['cats', 'newFolders', 'reasons', 'p_company', 'saveProfile']) assert.ok(!html.includes(`id="${id}"`), `Settings still has #${id}`);
+  assert.match(html, /id="profile"/);
+  assert.match(html, /href="onboarding.html">Edit profile/);
+  const popup = readFileSync(new URL('../src/popup/popup.js', import.meta.url), 'utf8');
+  assert.match(popup, /getURL\('folders.html'\)/);
 });
 
 test('onboarding and Settings offer Chrome\'s vertical tabs, and open its appearance settings to change them', () => {
