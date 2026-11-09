@@ -19,10 +19,10 @@ TabSage sorts your open tabs into Chrome's own tab groups, and it does it on you
 
 • Groups that match how you work. Tell TabSage where you work, what you do and which projects or customers you have, and work tabs are grouped by project ("Northwind · Atlas") while personal tabs are grouped by topic.
 • It learns from you. Move a tab to another group and a small card asks why, with one-click answers. Your reasons shape later decisions, and pages you place by hand stay where you put them.
-• New folders found in your own tabs. Distinctive words shared by several of your tabs become candidate folders, checked by the classifier before they are created. You can keep, rename or merge new folders in Settings.
+• New folders found in your own tabs. Distinctive words shared by several of your tabs become candidate folders, checked by the classifier before they are created. Review them on the Folders page: keep, rename or merge each one, and rename any folder in place.
 • A tab bar that holds still. Your most recently used tabs are never moved, so Ctrl+Tab still finds the tab you were just on, and other tabs are only sorted after you have left the tab bar alone for a few minutes.
-• Recent tabs one keypress away. A Recent tab pinned first in each window (Cmd/Ctrl+1) and the toolbar menu (Alt+Shift+T) both list your recent and most-used tabs, and your most-used pages are kept as pinned tabs.
-• Trims tabs you have stopped using. Tabs you have not looked at for a week are closed but stay searchable from the toolbar, and recently closed ones come back with their Back history.
+• Recent tabs one keypress away. A Recent tab pinned first in each window (Cmd/Ctrl+1) and the toolbar menu (Alt+Shift+T) both list your recent and most-used tabs; the menu's Groups tab shows every group, and your most-used pages are kept as pinned tabs.
+• Trims tabs you have stopped using. Tabs you have not looked at for a day are closed (you can choose a longer wait) but stay searchable from the toolbar, and recently closed ones come back with their Back history.
 • Your layout survives restarts. Groups are restored without reloading every tab.
 
 Private by design: TabSage reads only each page's title, description, site name, main heading and language, plus your bookmark folders, and keeps them in the browser's local storage. There is no account, no server, no analytics and no tracking. Its only network request is a one-time download of the classifier from Hugging Face.

@@ -66,6 +66,18 @@ const server = http.createServer((req, res) => {
 const url = (k) => `http://${k.split('/')[0]}:${PORT}/${k.split('/').slice(1).join('/')}`;
 
 // --- a real window with the extension
+// The toolbar menu is not a page Playwright can reach, so it is reached through Chrome's DevTools port.
+const DEVTOOLS = 9339;
+async function inMenu(expression) {
+  const targets = await (await fetch(`http://127.0.0.1:${DEVTOOLS}/json/list`)).json();
+  const t = targets.find((x) => x.url.endsWith('/popup.html'));
+  if (!t) throw new Error('the toolbar menu is not open');
+  const ws = new WebSocket(t.webSocketDebuggerUrl);
+  await new Promise((ok, bad) => { ws.onopen = ok; ws.onerror = bad; });
+  const done = new Promise((ok) => { ws.onmessage = (m) => { ws.close(); ok(JSON.parse(m.data)); }; });
+  ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression } }));
+  return done;
+}
 const ext = path.resolve('dist');
 // Vertical tabs (Chrome 156+), the layout TabSage suggests: written into the new profile before launch.
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-shots-'));
@@ -76,7 +88,9 @@ fs.writeFileSync(path.join(profile, 'Default', 'Preferences'), JSON.stringify({
 const ctx = await chromium.launchPersistentContext(profile, {
   headless: false, channel: 'chromium', viewport: null,
   args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--enable-features=VerticalTabs',
-    '--window-position=0,40', '--window-size=1280,800', '--hide-crash-restore-bubble'],
+    '--window-position=0,40', '--window-size=1280,800', '--hide-crash-restore-bubble', `--remote-debugging-port=${DEVTOOLS}`,
+    // no 1.1 GB classifier download for a screenshot run
+    '--host-resolver-rules=MAP huggingface.co ~NOTFOUND, MAP *.huggingface.co ~NOTFOUND, MAP *.hf.co ~NOTFOUND'],
 });
 let [sw] = ctx.serviceWorkers();
 if (!sw) sw = await ctx.waitForEvent('serviceworker');
@@ -184,6 +198,10 @@ for (let i = 0; i < 6 && opened !== 'ok'; i++) {
 }
 if (opened !== 'ok') throw new Error(`could not open the toolbar menu: ${opened}`);
 await wait(1200);
+// This run has no classifier, so the menu says it is waiting for one; a user with TabSage running never
+// sees that, so the screenshot shows the menu as they do.
+await inMenu("document.getElementById('engine').hidden = true");
+await wait(300);
 await capture('screenshot-3-menu');
 
 

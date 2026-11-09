@@ -80,7 +80,7 @@ computer only. None of it is synced to your Google account or sent anywhere.
 To remove it:
 
 - **Reset to defaults** on the Settings page clears all of it.
-- Your saved reasons can be deleted one by one in Settings.
+- Your saved reasons can be deleted one by one on the Folders page.
 - Removing TabSage from `chrome://extensions` deletes all of it, along with the
   cached classifier.
 
