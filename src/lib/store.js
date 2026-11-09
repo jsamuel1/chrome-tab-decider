@@ -5,7 +5,7 @@ export const DEFAULT_SETTINGS = {
   // Grouping
   maxGroups: 8,                 // top categories that get their own group; the rest go to "Other"
   otherGroupName: 'Other',
-  minConfidence: 0.35,          // decider confidence below this → Other
+  minConfidence: 0.7,           // decider confidence below this → Other
   autoDiscover: true,           // re-run category discovery when "Other" grows
   otherRediscoverThreshold: 6,  // tabs in Other (from ≥3 domains) before re-discovery
   collapseInactiveGroups: false,
@@ -45,6 +45,7 @@ const DEFAULT_STATE = {
   snapshot: null,   // last persisted window/group/tab layout
   archive: [],      // [{ id, url, title, favIconUrl, domain, catName, archivedAt, lastAccessed }]
   lastDiscovery: 0,
+  retiredNames: {}, // lowercased folder name -> when you merged, deleted or renamed it away
   stats: { organizedAt: 0, lastEngine: '' },
 };
 
@@ -94,7 +95,7 @@ export function setSiteRule(st, host, catId, at = Date.now()) {
 /** Bring state saved by an older version up to the current shape. Safe to run repeatedly. */
 export function migrate(st) {
   const fresh = structuredClone(DEFAULT_STATE);
-  for (const k of ['pageMap', 'siteRules', 'reasons', 'usage', 'ourPins', 'pinCooldown', 'profile']) {
+  for (const k of ['pageMap', 'siteRules', 'reasons', 'usage', 'ourPins', 'pinCooldown', 'profile', 'retiredNames']) {
     if (st[k] === undefined) st[k] = fresh[k];
   }
   for (const c of Object.values(st.categories || {})) {
@@ -141,7 +142,7 @@ export const EXPORT_FORMAT = 'tabsage';
 // What an import brings across. tabMeta (details of pages open in a tab) and snapshot (the window
 // layout) belong to the browser session the file was made in, so they start empty.
 const IMPORTED_STATE = ['categories', 'pageMap', 'siteRules', 'reasons', 'usage', 'ourPins', 'pinCooldown',
-  'profile', 'archive', 'lastDiscovery', 'stats', 'retiredDaily', 'schemaVersion', 'domainMap'];
+  'profile', 'archive', 'lastDiscovery', 'retiredNames', 'stats', 'retiredDaily', 'schemaVersion', 'domainMap'];
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 

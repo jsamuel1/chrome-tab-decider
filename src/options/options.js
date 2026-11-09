@@ -1,6 +1,6 @@
 import { openAppearanceSettings, bg, engine, esc, fmtBytes, progressText } from '../lib/ui-common.js';
 import { MODELS } from '../engine/models.js';
-import { llmAvailability, prepareLLM } from '../engine/llm.js';
+import { prepareLLM } from '../engine/llm.js';
 
 const $ = (id) => document.getElementById(id);
 let settings;
@@ -81,7 +81,8 @@ async function modelStatus() {
 }
 
 async function llmStatus() {
-  const a = await llmAvailability();
+  // the background remembers an "unavailable", so opening Settings does not log Chrome's policy error again
+  const a = (await bg('status')).llm;
   const text = {
     available: 'Gemini Nano ready',
     downloadable: 'Gemini Nano can be downloaded',

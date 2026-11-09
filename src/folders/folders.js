@@ -12,12 +12,61 @@ function placeSelect(c, all) {
   return `<select data-place="${esc(c.id)}">${opt('', 'Nothing (its own folder)')}${tops.map((o) => opt(o.id, o.kind === 'company' ? `${o.name} (work)` : o.name)).join('')}</select>`;
 }
 
+// A folder's name, with a Rename button that edits it in place: Enter or Save renames, Esc or Cancel
+// leaves it as it was. A name another folder already has offers to merge into that folder instead.
+const nameCell = (c) => c.id === 'other'
+  ? `<span class="fname">${esc(c.name)}</span>`
+  : `<span class="fname">${esc(c.name)}</span><button class="link" data-edit="${esc(c.id)}" aria-label="Rename ${esc(c.name)}">Rename</button>`;
+
+function startRename(btn) {
+  const cell = btn.closest('.namecell');
+  const name = cell.querySelector('.fname').textContent;
+  cell.innerHTML = `<form class="rename" data-cat="${esc(btn.dataset.edit)}">
+    <input type="text" value="${esc(name)}" aria-label="New name for ${esc(name)}" maxlength="80" required />
+    <button type="submit" class="primary">Save</button><button type="button" data-cancel>Cancel</button></form>`;
+  const input = cell.querySelector('input');
+  input.focus();
+  input.select();
+}
+
+async function saveRename(form) {
+  const catId = form.dataset.cat;
+  const name = form.querySelector('input').value.trim();
+  if (!name) return;
+  const r = await bg('renameCategory', { catId, name });
+  if (r?.clash) {
+    if (!confirm(`There is already a folder called ${r.clash.name}. Merge this folder into it? Its tabs move there, and this folder is gone for good.`)) {
+      return form.querySelector('input').focus();
+    }
+    await bg('reviewFolder', { catId, action: 'merge', intoId: r.clash.id });
+    say(`Merged into ${r.clash.name}.`);
+  } else if (r?.ok) say(`Renamed to ${name}.`);
+  refresh();
+}
+
+const say = (text) => { $('folderMsg').textContent = text; };
+const refresh = () => { cats(); review(); };
+
+document.addEventListener('click', (e) => {
+  const edit = e.target.closest('[data-edit]');
+  if (edit) return startRename(edit);
+  if (e.target.closest('[data-cancel]')) refresh();
+});
+document.addEventListener('submit', (e) => {
+  const form = e.target.closest('form.rename');
+  if (!form) return;
+  e.preventDefault();
+  saveRename(form);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && e.target.closest('form.rename')) { e.preventDefault(); refresh(); }
+});
+
 async function cats() {
   const s = await bg('status');
   $('cats').innerHTML = s.categories.map((c) => `
     <tr>
-      <td><span class="dot" style="background:var(--g-${c.color})"></span><input type="text" value="${esc(c.name)}" data-rename="${c.id}" ${c.id === 'other' ? 'disabled' : ''}/>
-        ${c.pinned ? '★' : ''}</td>
+      <td><div class="namecell"><span class="dot" style="background:var(--g-${c.color})"></span>${nameCell(c)}${c.pinned ? ' <span title="Pinned">★</span>' : ''}</div></td>
       <td>${placeSelect(c, s.categories)}</td>
       <td><div class="chips">${c.domains.map((d) => `<span class="chip" data-forget="${esc(d)}" title="Forget: pages on this site are decided one by one again">${esc(d)}</span>`).join('') || '<span class="muted">—</span>'}</div></td>
       <td>${c.id === 'other' ? '' : `<button data-del="${c.id}">Delete</button>`}</td>
@@ -31,9 +80,7 @@ $('cats').addEventListener('click', async (e) => {
 });
 $('cats').addEventListener('change', async (e) => {
   const p = e.target.closest('[data-place]');
-  if (p) { await bg('reviewFolder', { catId: p.dataset.place, action: 'place', intoId: p.value }); cats(); review(); return; }
-  const r = e.target.closest('[data-rename]');
-  if (r && r.value.trim()) { await bg('renameCategory', { catId: r.dataset.rename, name: r.value.trim() }); cats(); }
+  if (p) { await bg('reviewFolder', { catId: p.dataset.place, action: 'place', intoId: p.value }); cats(); review(); }
 });
 async function review() {
   const s = await bg('status');
@@ -42,11 +89,10 @@ async function review() {
   $('newCount').textContent = fresh.length ? `· ${fresh.length}` : '';
   $('newFolders').innerHTML = fresh.map((c) => `
     <tr data-new="${c.id}">
-      <td><input type="text" value="${esc(c.name)}" data-newname /></td>
+      <td><div class="namecell">${nameCell(c)}</div></td>
       <td class="muted">${c.tabCount} tab${c.tabCount === 1 ? '' : 's'}</td>
       <td><div class="acts">
         <button data-keep>Keep</button>
-        <button data-rename>Rename</button>
         <select data-merge><option value="">Merge into…</option>${s.categories.filter((o) => o.id !== c.id && !o.isNew).map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>
         <label class="small muted">Belongs under ${placeSelect(c, s.categories)}</label>
       </div></td>
@@ -60,11 +106,10 @@ async function reviewAction(e) {
   if (!row) return;
   const catId = row.dataset.new;
   if (e.target.matches('[data-keep]')) await bg('reviewFolder', { catId, action: 'keep' });
-  else if (e.target.matches('[data-rename]')) await bg('reviewFolder', { catId, action: 'rename', name: row.querySelector('[data-newname]').value });
   else if (e.target.matches('[data-place]') && e.type === 'change') await bg('reviewFolder', { catId, action: 'place', intoId: e.target.value });
   else if (e.target.matches('[data-merge]') && e.target.value && e.type === 'change') {
     // merging cannot be undone, so a stray arrow key on the list must not do it
-    const name = row.querySelector('[data-newname]').value;
+    const name = row.querySelector('.fname')?.textContent || '';
     const target = e.target.selectedOptions[0]?.textContent || '';
     if (!confirm(`Merge ${name} into ${target}? Its tabs move there, and ${name} is gone for good.`)) {
       e.target.value = '';

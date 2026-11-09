@@ -48,3 +48,36 @@ test('a merge into itself or a missing folder changes nothing', () => {
   reviewFolder(st, { catId: 'c2', action: 'merge', intoId: 'nope' });
   assert.deepEqual(st, blank());
 });
+
+// A folder you merged, deleted or renamed is not proposed again under its old name.
+const { renameFolder, retireName, isRetired } = await import('../src/lib/review.js');
+
+test('a merged folder\'s name stays with the folder it went into', () => {
+  const st = blank();
+  reviewFolder(st, { catId: 'c2', action: 'merge', intoId: 'c1' });
+  assert.equal(st.categories.c2, undefined);
+  assert.ok(isRetired(st, 'robots') && isRetired(st, ' Robots '), 'discovery could propose Robots again');
+  assert.equal(isRetired(st, 'Projects'), false);
+});
+
+test('renaming keeps the old name from coming back, and a name taken by another folder is refused', () => {
+  const st = blank();
+  assert.deepEqual(renameFolder(st, 'c2', '  Automata '), { ok: true });
+  assert.deepEqual([st.categories.c2.name, st.categories.c2.isNew], ['Automata', false]);
+  assert.ok(isRetired(st, 'Robots'));
+
+  assert.deepEqual(renameFolder(st, 'c2', 'projects'), { clash: { id: 'c1', name: 'Projects' } });
+  assert.equal(st.categories.c2.name, 'Automata', 'renamed onto another folder');
+  assert.deepEqual(renameFolder(st, 'c2', 'automata'), { ok: true }, 'changing only the case is a rename');
+  assert.equal(st.categories.c2.name, 'automata');
+  assert.deepEqual(renameFolder(st, 'c2', '   '), { error: 'empty' });
+  assert.deepEqual(renameFolder(st, 'nope', 'X'), { error: 'missing' });
+});
+
+test('a deleted folder\'s name is retired, and adding it yourself brings it back', () => {
+  const st = blank();
+  retireName(st, 'Robots');
+  assert.ok(isRetired(st, 'robots'));
+  retireName(st, 'Robots', { revive: true });
+  assert.equal(isRetired(st, 'robots'), false);
+});

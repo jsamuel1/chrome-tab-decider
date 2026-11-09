@@ -9,10 +9,11 @@
   :root { --bg: #1b1e24; --fg: #e8eaf0; --muted: #9aa3b2; --line: #2d323c; --hover: #262a33; --accent: #7aa2ff; --accent-fg: #0b1020; --chip: #262b35; --warn: #f59e0b; --ok: #4ade80; }
 }
 * { box-sizing: border-box; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
 body.popup { width: 380px; max-height: 580px; }
 .muted { color: var(--muted); } .small { font-size: 11px; }
-h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 12px 6px; font-weight: 600; }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--fg); margin: 12px 12px 6px; font-weight: 700; }
 header { padding: 10px 12px 6px; position: sticky; top: 0; background: var(--bg); z-index: 1; }
 input[type=search], input[type=text], input[type=number], select, textarea {
   width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit;
@@ -63,7 +64,7 @@ body.options { padding: 0 0 48px; }
 .tabbar a[role=tab][aria-selected=true] { color: var(--fg); border-bottom-color: var(--accent); }
 .options main { max-width: 760px; margin: 0 auto; padding: 4px 16px; }
 .options h1 { font-size: 15px; margin: 14px 0 2px; }
-.options h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; margin: 18px 0 4px; }
+.options h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--fg); font-weight: 700; margin: 20px 0 6px; }
 .options input[type=text], .options input[type=number], .options select, .options textarea { padding: 4px 8px; border-radius: 6px; }
 .options input[type=number] { width: 80px; }
 .options select { width: auto; max-width: 100%; }
@@ -92,11 +93,20 @@ a.button:hover { background: var(--hover); }
 table { width: 100%; border-collapse: collapse; }
 td, th { text-align: left; padding: 4px 6px; border-top: 1px solid var(--line); vertical-align: middle; }
 tr:first-child td { border-top: 0; }
-th { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600; border-top: 0; }
+th { font-size: 11px; color: var(--fg); text-transform: uppercase; font-weight: 700; border-top: 0; white-space: nowrap; }
 td input[type=text] { width: 180px; }
 td { white-space: nowrap; }
 td .chips { white-space: normal; }
 td .dot { display: inline-block; vertical-align: middle; margin-right: 6px; }
+.namecell { display: flex; align-items: center; gap: 6px; min-height: 28px; }
+.namecell .fname { font-weight: 500; }
+button.link { border: 0; background: none; padding: 2px 4px; color: var(--accent); font-size: 12px; text-decoration: underline; }
+button.link:hover { background: none; color: var(--fg); }
+form.rename { display: flex; gap: 4px; align-items: center; }
+form.rename input { width: 200px; }
+#folderMsg { min-height: 0; margin-top: 8px; }
+#folderMsg:empty { display: none; }
+#reasons td:first-child { white-space: normal; width: 100%; }
 .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; white-space: normal; }
 .acts label { display: inline-flex; align-items: center; gap: 4px; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }

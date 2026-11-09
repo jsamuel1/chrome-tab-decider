@@ -3,6 +3,8 @@
 import { getSettings, getState, updateState } from './store.js';
 import { hostOf, isGroupable, pageKey, realUrl } from './urls.js';
 import { OTHER_ID, ensureOther, findByName, mergeCategories } from './categories.js';
+import { isRetired } from './review.js';
+import { stillBlocked } from './llm-blocked.js';
 import { ai, classifierReady, deciderStatus } from './ai.js';
 import { candidateTerms, displayName } from './bm25.js';
 import { profileText } from './profile.js';
@@ -228,7 +230,8 @@ async function discover(st, settings, pages, inOther, proposed = []) {
     .map((c) => ({ name: displayName(c.term, c.keys.map((k) => text.get(k))), description: '', keys: c.keys }));
   for (const c of proposed) names.push({ name: c?.name, description: c?.description || '', keys: llmKeys });
 
-  if (settings.useLLM && !proposed.length && inOther.length) {
+  const { llmBlocked } = await chrome.storage.local.get('llmBlocked');
+  if (settings.useLLM && !proposed.length && inOther.length && !stillBlocked(llmBlocked, navigator.userAgent)) {
     try {
       const items = inOther.map((t) => ({ domain: hostOf(realUrl(t)), title: text.get(keyOf(t)).split('\n')[0] }));
       const existing = realCats(st).map((c) => ({ name: c.name, description: c.description }));
@@ -242,7 +245,7 @@ async function discover(st, settings, pages, inOther, proposed = []) {
   const added = [];
   for (const c of names) {
     const name = String(c.name || '').trim().slice(0, 80);
-    if (!name || findByName(st, name) || rejected.has(name.toLowerCase())) continue;
+    if (!name || findByName(st, name) || isRetired(st, name) || rejected.has(name.toLowerCase())) continue;
     const texts = c.keys.map((k) => text.get(k)).filter(Boolean);
     try {
       const r = await ai('decider.noul', {

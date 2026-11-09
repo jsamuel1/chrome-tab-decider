@@ -6,13 +6,19 @@ export function hasPromptApi() {
   return typeof globalThis.LanguageModel !== 'undefined';
 }
 
+// "unavailable" does not change while a page is open, and each check logs an error while policy blocks it
+let unavailable = false;
 export async function llmAvailability() {
   if (!hasPromptApi()) return 'unsupported';
+  if (unavailable) return 'unavailable';
+  let a;
   try {
-    return await LanguageModel.availability(LANG);
+    a = await LanguageModel.availability(LANG);
   } catch (e) {
-    return 'unavailable';
+    a = 'unavailable';
   }
+  unavailable = a === 'unavailable';
+  return a;
 }
 
 /** Must be called from a user gesture if the model still needs downloading. */

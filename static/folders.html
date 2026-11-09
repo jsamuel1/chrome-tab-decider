@@ -16,6 +16,8 @@
       </nav>
     </header>
     <main>
+    <h1 class="sr-only">TabSage Folders</h1>
+    <div class="muted small" id="folderMsg" role="status" aria-live="polite"></div>
     <h2>New folders <span class="muted" id="newCount"></span></h2>
     <div class="card">
       <div class="muted small" id="newNone">Nothing to review.</div>
@@ -25,14 +27,14 @@
     <h2>Folders &amp; learned sites</h2>
     <div class="card">
       <table>
-        <thead><tr><th>Folder</th><th>Belongs under</th><th>Sites you bound here (click to forget)</th><th></th></tr></thead>
+        <thead><tr><th>Folder</th><th>Belongs under</th><th>Sites you bound here</th><th></th></tr></thead>
         <tbody id="cats"></tbody>
       </table>
       <div class="inline">
         <input type="text" id="newCat" placeholder="Add a folder…" />
         <button id="addCat">Add</button>
       </div>
-      <div class="help">Move a tab into a different group and TabSage keeps that page there. It covers the whole site only if you choose that answer when TabSage asks why.</div>
+      <div class="help">Move a tab into a different group and TabSage keeps that page there. It covers the whole site only if you choose that answer when TabSage asks why. Click a site to forget it.</div>
     </div>
 
     <h2>Reasons you gave</h2>

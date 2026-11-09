@@ -3,7 +3,7 @@
 import { getSettings, setSettings, getState, updateState, flushState, regroups, fromExport, replaceState, EXPORT_FORMAT, DEFAULT_SETTINGS } from './lib/store.js';
 import { organize, learnFromUser, expectedGroupChange, clearManual, catForGroup, groupCat, markActivity, saveWhy, whyQuestion, noteTabClosed, noteUnpinned, notePinnedNavigated } from './lib/organizer.js';
 import { deleteReason as removeReason } from './lib/reasons.js';
-import { reviewFolder as review } from './lib/review.js';
+import { reviewFolder as review, renameFolder, retireName } from './lib/review.js';
 import { sortAll } from './lib/sorter.js';
 import { snapshot, restore, restoreCollapsed } from './lib/persist.js';
 import { runArchive, search, reopenArchived, deleteArchived } from './lib/archive.js';
@@ -16,6 +16,7 @@ import { OTHER_ID, mergeCategories } from './lib/categories.js';
 import { groupTitle, isRename, nameFromTitle } from './lib/grouping.js';
 import { cleanDetails, detailsCount, detailsKey, pruneTabMeta, tracked } from './lib/pagemeta.js';
 import { allowed } from './lib/senders.js';
+import { stillBlocked, afterCheck } from './lib/llm-blocked.js';
 import { recordUse, pruneUsage } from './lib/usage.js';
 import { bookmarkFolders } from './lib/bookmarks.js';
 import { onboardingSuggestions, saveProfile } from './lib/onboarding.js';
@@ -239,6 +240,19 @@ chrome.tabGroups.onUpdated.addListener(async (g) => {
 chrome.tabGroups.onRemoved.addListener((g) => groupCat.delete(g.id));
 
 // ---------- messages from popup / options / offscreen
+// Chrome's built-in model: asked through the engine page, except while an earlier answer of
+// "unavailable" still holds (each check while it is blocked adds an error on chrome://extensions).
+async function llmAvailabilityRemembered() {
+  const { llmBlocked } = await chrome.storage.local.get('llmBlocked');
+  if (stillBlocked(llmBlocked, navigator.userAgent)) return 'unavailable';
+  let llm = 'unknown';
+  try { llm = (await ai('llm.availability', {}, 15000)).availability; } catch { return llm; }
+  const rec = afterCheck(llm, navigator.userAgent);
+  if (rec) await chrome.storage.local.set({ llmBlocked: rec });
+  else if (llmBlocked) await chrome.storage.local.remove('llmBlocked');
+  return llm;
+}
+
 const api = {
   /** The popup's Recent lists: your most recently used tabs, then the open pages you use most. */
   async recentLists({ recent: nRecent = 10, used: nUsed = 10 } = {}) {
@@ -257,8 +271,7 @@ const api = {
     const problem = modelError(settings);
     if (problem) engine = { error: problem };
     else try { engine = await ai('decider.status', { settings }, 15000); } catch (e) { engine = { error: e.message }; }
-    let llm = 'unknown';
-    try { llm = (await ai('llm.availability', {}, 15000)).availability; } catch {}
+    const llm = await llmAvailabilityRemembered();
     const groups = await chrome.tabGroups.query({});
     const tabs = await chrome.tabs.query({});
     const cats = [];
@@ -289,13 +302,16 @@ const api = {
     await updateState((st) => { if (st.categories[catId]) st.categories[catId].pinned = pinned; }, { immediate: true });
     await organize({ reason: 'pin' });
   },
+  // { ok } once renamed, or { clash: { id, name } } when another folder has that name (Folders offers a merge).
   async renameCategory({ catId, name }) {
-    await updateState((st) => { if (st.categories[catId]) st.categories[catId].name = name; }, { immediate: true });
-    await organize({ reason: 'rename' });
+    const r = await updateState((st) => renameFolder(st, catId, name), { immediate: true });
+    if (r.ok) await organize({ reason: 'rename' });
+    return r;
   },
   async deleteCategory({ catId }) {
     if (catId === OTHER_ID) return;
     await updateState((st) => {
+      if (st.categories[catId]) retireName(st, st.categories[catId].name);
       delete st.categories[catId];
       for (const [k, m] of Object.entries(st.pageMap)) if (m.catId === catId) delete st.pageMap[k];
       for (const [h, r] of Object.entries(st.siteRules)) if (r.catId === catId) delete st.siteRules[h];
@@ -304,7 +320,7 @@ const api = {
     await organize({ reason: 'delete-category' });
   },
   async addCategory({ name, description }) {
-    await updateState((st) => { mergeCategories(st, [{ name, description }], 'user'); }, { immediate: true });
+    await updateState((st) => { retireName(st, name, { revive: true }); mergeCategories(st, [{ name, description }], 'user'); }, { immediate: true });
     await organize({ reason: 'add-category' });
   },
   async onboardingSuggestions() {

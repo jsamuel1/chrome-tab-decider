@@ -30,7 +30,8 @@ test("Settings no longer describes the old site-wide, keyword-based behaviour", 
     assert.ok(!html.includes(stale) && !fhtml.includes(stale), `Settings or Folders still says "${stale}"`);
   }
   for (const stale of ['keyword matching', 'Its domains will be re-classified']) assert.ok(!js.includes(stale) && !fjs.includes(stale), `still says "${stale}"`);
-  assert.match(fhtml, /Sites you bound here \(click to forget\)/);
+  assert.match(fhtml, /Sites you bound here/);
+  assert.match(fhtml, /Click a site to forget it/);
   assert.match(js, /TabSage leaves your tabs alone until it is/);
 });
 
