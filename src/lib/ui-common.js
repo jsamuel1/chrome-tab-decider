@@ -48,7 +48,7 @@ export function progressText(p) {
   return `Downloading ${p.file} — ${fmtBytes(p.loaded)}${p.total ? ' / ' + fmtBytes(p.total) : ''}${pct}`;
 }
 
-export function engineSummary(status) {
+export function engineSummary(status, { llm: withLlm = true } = {}) {
   const e = status.engine || {};
   const parts = [];
   if (e.error) parts.push(`<span class="warn">Engine error: ${esc(e.error)}</span>`);
@@ -62,9 +62,9 @@ export function engineSummary(status) {
     available: '<b class="ok">ready</b>',
     downloadable: '<span class="warn">needs download (Settings)</span>',
     downloading: 'downloading…',
-    unavailable: '<span class="warn">unavailable (blocked by policy, or unsupported device)</span>',
+    unavailable: '<span class="warn">unavailable</span>',
     unsupported: 'not exposed to background — runs from this popup',
   }[status.llm] || esc(status.llm);
-  parts.push(`Folder discovery (built-in LLM): ${status.settings.useLLM ? llm : 'off'}`);
+  if (withLlm) parts.push(`Folder discovery (built-in LLM): ${status.settings.useLLM ? llm : 'off'}`);
   return parts.join('<br>');
 }

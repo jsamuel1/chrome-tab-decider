@@ -24,9 +24,29 @@ async function showRecent() {
   paintSel();
 }
 
+// The classifier's state is in Settings; the popup only says so while it is not ready to sort tabs.
+function showEngine() {
+  const e = status?.engine || {};
+  const show = !!(e.error || e.loading || !(e.loaded || e.downloaded));
+  $('engine').hidden = !show;
+  if (show) $('engine').innerHTML = engineSummary(status, { llm: false });
+}
+
+// ---------- tabs: Recent (default) and Groups; the last one you chose opens next time
+function showTab(name) {
+  for (const [tab, pane] of [['tabRecent', 'recentPane'], ['tabGroups', 'groupsPane']]) {
+    const on = tab === (name === 'groups' ? 'tabGroups' : 'tabRecent');
+    $(tab).setAttribute('aria-selected', String(on));
+    $(pane).hidden = !on;
+  }
+  localStorage.popupTab = name;
+}
+$('tabRecent').onclick = () => { showTab('recent'); $('q').focus(); };
+$('tabGroups').onclick = () => showTab('groups');
+
 async function refresh() {
   status = await bg('status');
-  $('engine').innerHTML = engineSummary(status);
+  showEngine();
   const g = $('groups');
   const cats = status.categories.filter((c) => c.tabCount > 0 || c.pinned);
   g.innerHTML = cats.length
@@ -98,8 +118,9 @@ $('q').addEventListener('input', () => {
 
 async function runSearch() {
   const q = $('q').value;
-  $('home').hidden = !!q;
+  for (const id of ['tabbar', 'recentPane', 'groupsPane']) $(id).hidden = !!q;
   $('results').hidden = !q;
+  if (!q) showTab(localStorage.popupTab || 'recent');
   if (!q) return showRecent();
   const r = await bg('search', { query: q });
   const row = (it, i) => `
@@ -150,7 +171,7 @@ for (const id of ['recentList', 'usedList']) {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (!rows.length) return;
+  if (!rows.length || ($('results').hidden && $('recentPane').hidden)) return;
   if (e.key === 'ArrowDown') { sel = Math.min(rows.length - 1, sel + 1); paintSel(); e.preventDefault(); }
   if (e.key === 'ArrowUp') { sel = Math.max(0, sel - 1); paintSel(); e.preventDefault(); }
   if (e.key === 'Enter' && sel >= 0) openRow(sel, e);
@@ -160,9 +181,10 @@ chrome.runtime.onMessage.addListener((m) => {
   if (m.from === 'offscreen' && (m.type === 'model-progress' || m.type === 'model-ready') && status) {
     if (m.type === 'model-progress') status.engine = { ...status.engine, loading: true, progress: m.progress };
     else status.engine = { ...status.engine, loading: false, loaded: true, downloaded: true, device: m.device };
-    $('engine').innerHTML = engineSummary(status);
+    showEngine();
   }
 });
 
+showTab(localStorage.popupTab || 'recent');
 refresh();
 showRecent();

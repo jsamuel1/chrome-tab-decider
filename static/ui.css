@@ -25,6 +25,16 @@ button.ghost { border-color: transparent; }
 button:disabled { opacity: .55; cursor: default; }
 .toolbar { display: flex; gap: 6px; padding: 4px 12px; }
 .toolbar .ghost { margin-left: auto; }
+.tabbar { display: flex; align-items: center; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); position: sticky; top: 50px; background: var(--bg); z-index: 1; }
+.tabbar [role=tab] { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 10px 6px; color: var(--muted); background: none; font-weight: 600; }
+.tabbar [role=tab][aria-selected=true] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabbar .gear { margin-left: auto; border: 0; background: none; font-size: 22px; line-height: 1; padding: 4px 6px; color: var(--muted); }
+.tabbar .gear:hover { color: var(--fg); }
+.popup .hint { margin: 6px 12px 2px; }
+#groupsPane .toolbar { padding-top: 10px; }
+#newFolders { display: block; margin: 8px 12px 0; }
+#newFolders[hidden] { display: none; }
+#recentPane { padding-top: 4px; }
 .engine { margin: 8px 12px 0; padding: 8px 10px; background: var(--chip); border-radius: 8px; font-size: 12px; }
 .engine b { font-weight: 600; }
 .engine .warn { color: var(--warn); } .engine .ok { color: var(--ok); }

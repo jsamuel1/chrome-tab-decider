@@ -16,19 +16,27 @@
       <div id="archList"></div>
     </section>
 
-    <section id="home">
-      <h3 id="recentHead">Recent</h3>
+    <nav class="tabbar" id="tabbar" role="tablist">
+      <button role="tab" id="tabRecent" aria-controls="recentPane" aria-selected="true">Recent</button>
+      <button role="tab" id="tabGroups" aria-controls="groupsPane" aria-selected="false">Groups</button>
+      <button id="settings" class="gear" title="Settings" aria-label="Settings">⚙</button>
+    </nav>
+
+    <div id="engine" class="engine" hidden></div>
+
+    <section id="recentPane" role="tabpanel" aria-labelledby="tabRecent">
       <div id="recentList"></div>
       <h3 id="usedHead" hidden>Most used</h3>
       <div id="usedList"></div>
+    </section>
+
+    <section id="groupsPane" role="tabpanel" aria-labelledby="tabGroups" hidden>
       <div class="toolbar">
         <button id="organize" class="primary" title="Group & sort now (Alt+Shift+O)">Organize</button>
         <button id="rediscover" title="Re-read all titles and propose fresh folders">Re-discover</button>
-        <button id="settings" class="ghost" title="Settings">⚙</button>
       </div>
-      <div id="engine" class="engine"></div>
       <a href="#" id="newFolders" class="small" hidden></a>
-      <h3>Groups <span class="muted small">· ★ pins a group to the front and protects it from trimming</span></h3>
+      <p class="muted small hint">★ pins a group to the front and protects it from trimming</p>
       <div id="groups"></div>
       <div class="foot muted small" id="foot"></div>
     </section>
